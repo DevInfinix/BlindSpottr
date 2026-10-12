@@ -1,0 +1,7 @@
+{
+  "$schema": "https://app.kilo.ai/config.json",
+  "indexing": {
+    "model": "nvidia/llama-nemotron-embed-vl-1b-v2:free",
+    "dimension": 2048
+  }
+}
