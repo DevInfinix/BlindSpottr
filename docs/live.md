@@ -132,6 +132,7 @@ In the Serial Monitor terminal, you can interact directly:
 | **LED doesn't light up** | Reversed polarity | Rotate the LED 180° so the long leg connects to the ESP32 GPIO. |
 | **LED is extremely dim** | Resistor value too high | Ensure you are using 220Ω or 330Ω (Red-Red-Brown or Orange-Orange-Brown). Do not use 10kΩ. |
 | **Wrong LED blinks** | Swapped GPIO pins | Verify GPIO 25 is Left Red, GPIO 26 is Right Red, and GPIO 27 is Green. |
+| **`termios.error: (22, 'Invalid argument')` on upload** | Port locked by external app | On macOS, apps like the ChatGPT desktop app can acquire an exclusive `AppleUSBHostDeviceUserClient` lock on the CP2102 port. Close the ChatGPT app (Cmd+Q) before running `pio run -t upload`. |
 | **ESP32 resets on boot** | Short circuit | Disconnect USB immediately. Check that resistors are not bridging +3.3V/5V directly to GND. |
 
 ---
