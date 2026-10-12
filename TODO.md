@@ -11,8 +11,8 @@
 | Phase | Title | Focus Area | Status |
 | :--- | :--- | :--- | :--- |
 | **Phase 0** | **Reconnaissance & Engineering Setup** | Specs, documentation, skills, and Git protocol | **COMPLETED** |
-| **Phase 1** | **PlatformIO Foundation & Pin Configuration** | `platformio.ini`, `lib_deps`, `config.h` | **PENDING (ACTIVE)** |
-| **Phase 2** | **Sensor Abstractions & Non-Blocking Hold** | Radar hold timer, IR polarity, debouncing | **PENDING** |
+| **Phase 1** | **PlatformIO Foundation & Pin Configuration** | `platformio.ini`, `lib_deps`, `config.h` | **COMPLETED** |
+| **Phase 2** | **Sensor Abstractions & Non-Blocking Hold** | Radar hold timer, IR polarity, debouncing | **PENDING (ACTIVE)** |
 | **Phase 3** | **Sensor Fusion & 4-State Machine** | Boolean fusion, FSM transitions, unit tests | **PENDING** |
 | **Phase 4** | **Local Actuation & Cockpit UI** | LEDs, active buzzer cadences, SSD1306 OLED | **PENDING** |
 | **Phase 5** | **FreeRTOS Concurrency & Dual-Core Task** | Core 0 50 Hz task, spinlocks, state manager | **PENDING** |
@@ -39,7 +39,7 @@
 ## Phase 1: PlatformIO Foundation & Pin Configuration
 
 ### Task 1.1 — PlatformIO Environment & Dependency Configuration
-- **Status:** Pending
+- **Status:** **COMPLETED**
 - **Objective:** Configure `platformio.ini` with verified libraries, build flags, and monitor baud rate.
 - **Why this is necessary:** BlindSpottr requires Adafruit graphics, SSD1306 drivers, ArduinoJson, and asynchronous web serving. Setting this up first guarantees a stable compilation pipeline.
 - **Prerequisites:** Task 0.2.
@@ -50,14 +50,13 @@
   3. Add build flags for debug levels and Core 1 network binding.
   4. Run `/opt/homebrew/bin/pio run` to verify clean library resolution and compilation.
 - **Expected files:** `platformio.ini`.
-- **Integration considerations:** Modern ESPAsyncWebServer fork (`mathieucarbou`) must be used for ESP-IDF / Arduino 2.x/3.x compatibility.
-- **Testing & validation:** Run `pio run` locally; zero compilation warnings or unresolved include headers.
-- **Potential failure cases:** Incompatible AsyncTCP versions on ESP32 dual-core.
-- **Acceptance criteria:** `platformio.ini` resolves all libraries and compiles an empty sketch cleanly.
+- **Integration considerations:** Modern ESPAsyncWebServer fork (`mathieucarbou`) must be used for ESP-IDF / Arduino 2.x/3.x compatibility. Set `lib_ignore = WebServer` and `lib_ldf_mode = deep+` to prevent LDF conflict.
+- **Testing & validation:** Run `pio run` locally; zero compilation warnings or unresolved include headers. Verified with `pio run` (SUCCESS in 3.79s).
+- **Acceptance criteria:** `platformio.ini` resolves all libraries and compiles cleanly.
 - **GitHub tracking:** Issue #1.
 
 ### Task 1.2 — Centralized Hardware Pinout & Configuration Header
-- **Status:** Pending
+- **Status:** **COMPLETED**
 - **Objective:** Implement `include/config.h` containing all pin definitions, timing parameters, and Wi-Fi credentials.
 - **Why this is necessary:** Eliminates magic numbers across modules and enforces single-source-of-truth pinout rules.
 - **Prerequisites:** Task 1.1.
@@ -69,10 +68,9 @@
   4. Define Buzzer: `PIN_BUZZER (14)`.
   5. Define I2C OLED: `PIN_I2C_SDA (21)`, `PIN_I2C_SCL (22)`, `OLED_I2C_ADDR (0x3C)`.
   6. Define timing parameters: `SENSING_CADENCE_MS (20)`, `RADAR_HOLD_MS (3000)`, `IR_DETECT_LEVEL (LOW)`.
-- **Expected files:** `include/config.h` (Proposed).
+- **Expected files:** `include/config.h`.
 - **Integration considerations:** Must include `#pragma once` and compile without external dependencies.
-- **Testing & validation:** Include `config.h` in `src/main.cpp` and verify clean build with `pio run`.
-- **Potential failure cases:** Typo in pin numbers causing conflict with strapping pins.
+- **Testing & validation:** Include `config.h` in `src/main.cpp` and verify clean build with `pio run`. Build verified [SUCCESS].
 - **Acceptance criteria:** `include/config.h` exists, defines all required constants, and builds without warnings.
 - **GitHub tracking:** Issue #2.
 

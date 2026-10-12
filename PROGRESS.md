@@ -9,13 +9,13 @@
 
 ## 1. Project Status Overview
 
-- **Current Implementation Phase:** Phase 0 (Project Reconnaissance, Specification Ingestion & Engineering Setup) — **COMPLETED**.
-- **Active Next Phase:** Phase 1 (PlatformIO Foundation & Pin Configuration).
+- **Current Implementation Phase:** Phase 1 (PlatformIO Foundation & Pin Configuration) — **COMPLETED**.
+- **Active Next Phase:** Phase 2 (Sensor Abstraction & Non-Blocking Hold Timing).
 - **Target Microcontroller:** ESP32 38-pin DevKit V1 (`esp32doit-devkit-v1`).
 - **Framework:** Arduino Framework on PlatformIO.
 - **Git Branch:** Initialized repository on `dev` (integration) and `main` (production).
 - **GitHub Remote:** `https://github.com/DevInfinix/BlindSpottr` (Public).
-- **Active GitHub Issues:** #1 (PlatformIO dependencies), #2 (Hardware pin configuration).
+- **Active GitHub Issues:** #1 (Closed - Dependencies configured), #2 (Closed - Pin configuration established).
 
 ---
 
@@ -48,6 +48,7 @@ All documentation has been established and cross-referenced without information 
 | **`docs/architecture.md`** | `/docs/architecture.md` | **CREATED** | System architecture specification with Mermaid diagrams (components, concurrency, data flow, FSM). |
 | **`docs/design.md`** | `/docs/design.md` | **CREATED** | System design rationale, sensor physics, state priority semantics, UI layouts, and electrical constraints. |
 | **`docs/implementation.md`** | `/docs/implementation.md` | **CREATED** | Modular firmware architecture, C++ class interfaces, FreeRTOS task models, and PlatformIO dependencies. |
+| **`docs/live.md`** | `/docs/live.md` | **CREATED** | Step-by-step physical hardware connection guide, Mermaid wiring architecture, multimeter testing procedures, and live hardware matrix. |
 | **`TODO.md`** | `/TODO.md` | **CREATED** | Detailed 8-phase implementation roadmap with 19 comprehensive tasks and acceptance criteria. |
 | **`PROGRESS.md`** | `/PROGRESS.md` | **CREATED** | Current implementation state, verification records, known issues, and handoff instructions. |
 | **`README.md`** | `/README.md` | **CREATED** | Technical engineering portfolio overview with badges, architecture diagrams, and hardware tables. |
@@ -60,7 +61,7 @@ The mandatory technical skills were identified, retrieved from `skills.sh`, inst
 
 | Mandatory Skill | Installed Location | Consultation & Application |
 | :--- | :--- | :--- |
-| **`platformio`** | `~/.agents/skills/platformio/SKILL.md` | Consulted for `platformio.ini` dependency structure and CLI build verification commands. |
+| **`platformio`** | `~/.agents/skills/platformio/SKILL.md` | Consulted for `platformio.ini` dependency structure, LDF `deep+` mode, and CLI build verification commands. |
 | **`esp32`** | `~/.agents/skills/esp32/SKILL.md` | Consulted for ESP32 38-pin DevKit GPIO constraints, strapping pin hazards (0, 2, 12, 15), and input-only pins (34, 35). |
 | **`non-blocking-patterns`** | `~/.agents/skills/non-blocking-patterns/SKILL.md` | Consulted for state machine timing without `delay()` and non-blocking radar hold latch windows. |
 | **`embedded-systems`** | `~/.agents/skills/embedded-systems/SKILL.md` | Consulted for electrical decoupling, noise filtering, and hardware safety rules. |
@@ -71,17 +72,19 @@ The mandatory technical skills were identified, retrieved from `skills.sh`, inst
 
 ## 5. Completed vs. Incomplete Scope
 
-### Completed Work (Phase 0)
+### Completed Work (Phase 0 & Phase 1)
 - [x] Repository reconnaissance completed and audited.
 - [x] Full 1,727-line specification ingested and preserved in `docs/flow.md`.
-- [x] Documentation hierarchy established (`AGENTS.md`, `hs.md`, `architecture.md`, `design.md`, `implementation.md`).
+- [x] Documentation hierarchy established (`AGENTS.md`, `hs.md`, `architecture.md`, `design.md`, `implementation.md`, `live.md`).
 - [x] Detailed phased implementation roadmap authored in `TODO.md`.
 - [x] Tracking and audit system established in `PROGRESS.md`.
 - [x] Professional technical README created.
 - [x] User configuration choices collected and incorporated (Repo name: `BlindSpottr`, Branching: `main` + `dev`, Dashboard: PROGMEM).
+- [x] **Phase 1 Task 1.1:** `platformio.ini` dependencies resolved and compiled cleanly with `pio run`.
+- [x] **Phase 1 Task 1.2:** `include/config.h` created with authoritative hardware pinouts and timing parameters.
+- [x] Live hardware guide created in `docs/live.md` with Mermaid wiring diagrams.
 
-### Incomplete Work (Phases 1–8)
-- [ ] Phase 1: `platformio.ini` library dependencies and `include/config.h` pinout header.
+### Incomplete Work (Phases 2–8)
 - [ ] Phase 2: Radar and IR sensor drivers with 3-second hold logic.
 - [ ] Phase 3: Sensor fusion calculation, 4-state FSM, and Unity unit tests.
 - [ ] Phase 4: LED indicators, active buzzer cadences, and SSD1306 OLED screen rendering.
@@ -108,10 +111,11 @@ The mandatory technical skills were identified, retrieved from `skills.sh`, inst
 
 ## 7. Next Recommended Action
 
-The next AI coding agent must execute:
-**Phase 1, Task 1.1 — PlatformIO Environment & Dependency Configuration**
-1. Read `AGENTS.md` and `hs.md`.
-2. Inspect `platformio.ini`.
-3. Add verified libraries (`Adafruit SSD1306`, `Adafruit GFX`, `ArduinoJson`, `ESPAsyncWebServer`, `AsyncTCP`).
-4. Run `/opt/homebrew/bin/pio run` to verify resolution and compilation.
-5. Create commit: `BUILD: configure PlatformIO dependencies for display and networking`.
+The next development action from `TODO.md` is:
+**Phase 2, Task 2.1 — RCWL-0516 Radar Sensor Driver with 3-Second Hold Latch**
+1. Read `AGENTS.md` and `docs/flow.md` §7, §9.
+2. Implement `src/sensors/radar.h` and `src/sensors/radar.cpp`.
+3. Support non-blocking timestamp arithmetic for 3000 ms hold latching.
+4. Run `/opt/homebrew/bin/pio run` to verify compilation.
+5. Update `docs/live.md`, `TODO.md`, and `PROGRESS.md`.
+6. Create commit: `FEAT: implement non-blocking RCWL-0516 radar sensor driver with 3-second hold window`.
