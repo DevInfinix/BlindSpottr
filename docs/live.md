@@ -6,186 +6,147 @@
 
 ---
 
-## 1. Master Breadboard & Wiring Architecture
+## ⚡ CURRENT ACTIVE BENCH TEST: Component 1 — Cockpit LED Cluster
 
-The system connects to an **ESP32 38-Pin Development Board (DevKit V1)**.
+We are bringing up the hardware **one component at a time**. The currently active firmware on `dev` compiles and tests the **Cockpit LED Indicators (Safe Green + Left/Right Red Alert LEDs)**.
 
-```mermaid
-graph TD
-    subgraph Power_Rails["Power Distribution (Breadboard Rails)"]
-        USB["USB 5V / External 5V Regulated Supply"] --> RAIL_5V["+5V Rail (Red)"]
-        USB --> RAIL_GND["GND Rail (Blue/Black)"]
-        ESP32_3V3["ESP32 3V3 Pin"] --> RAIL_3V3["+3.3V Rail"]
-        CAP1["100 µF Electrolytic + 0.1 µF Ceramic Bypass"] --- RAIL_5V
-        CAP1 --- RAIL_GND
-    end
-
-    subgraph ESP32["ESP32 38-Pin MCU"]
-        P32["GPIO 32 (Input)"]
-        P33["GPIO 33 (Input)"]
-        P34["GPIO 34 (Input-Only GPI)"]
-        P35["GPIO 35 (Input-Only GPI)"]
-        P25["GPIO 25 (Output)"]
-        P26["GPIO 26 (Output)"]
-        P27["GPIO 27 (Output)"]
-        P14["GPIO 14 (Output)"]
-        P21["GPIO 21 (I2C SDA)"]
-        P22["GPIO 22 (I2C SCL)"]
-    end
-
-    subgraph Sensors_Left["Left Blind-Spot Zone"]
-        RL["RCWL-0516 Radar (Left)"]
-        IL["IR Obstacle Sensor (Left)"]
-    end
-
-    subgraph Sensors_Right["Right Blind-Spot Zone"]
-        RR["RCWL-0516 Radar (Right)"]
-        IR["IR Obstacle Sensor (Right)"]
-    end
-
-    subgraph Indicators["Cockpit Warnings & Display"]
-        LED_L["Left Red Warning LED + 330Ω"]
-        LED_R["Right Red Warning LED + 330Ω"]
-        LED_S["Safe Green LED + 330Ω"]
-        BUZZ["Active Buzzer (5V/3.3V)"]
-        OLED["0.96 inch SSD1306 OLED (I2C 0x3C)"]
-    end
-
-    %% Wiring connections
-    RL -->|OUT Pin| P32
-    RR -->|OUT Pin| P33
-    IL -->|OUT Pin| P34
-    IR -->|OUT Pin| P35
-
-    P25 --> LED_L
-    P26 --> LED_R
-    P27 --> LED_S
-    P14 --> BUZZ
-
-    P21 -->|SDA| OLED
-    P22 -->|SCL| OLED
-
-    RAIL_5V -.->|VCC| RL
-    RAIL_5V -.->|VCC| RR
-    RAIL_3V3 -.->|VCC| IL
-    RAIL_3V3 -.->|VCC| IR
-    RAIL_3V3 -.->|VCC| OLED
-    RAIL_GND -.->|GND All| RL
-    RAIL_GND -.->|GND All| RR
-    RAIL_GND -.->|GND All| IL
-    RAIL_GND -.->|GND All| IR
-    RAIL_GND -.->|GND All| OLED
-```
+### 1. Required Parts for this Step
+* 1× **Green LED** (Safe Status Indicator)
+* 2× **Red LEDs** (Left Hazard & Right Hazard Warnings)
+* 3× **220Ω or 330Ω Resistors** (Current limiting for LEDs)
+* 4× Jumper wires (Male-to-Male)
+* 1× Breadboard
+* 1× ESP32 38-Pin DevKit V1 + Micro-USB cable
 
 ---
 
-## 2. Pin-by-Pin Hardware Connection Table
-
-| Peripheral | Module Pin | ESP32 GPIO / Rail | Wire Color (Rec.) | Notes & Electrical Safety |
-| :--- | :--- | :--- | :--- | :--- |
-| **Power In** | Micro-USB | PC / 5V USB Power | - | Provides regulated 5V to DevKit Vin |
-| **Power Rails** | ESP32 `VIN` / `5V` | Breadboard Red Rail | Red | Powers Radar modules and Buzzer |
-| | ESP32 `3V3` | Breadboard +3.3V Rail | Orange | Powers IR sensors and OLED (3.3V logic) |
-| | ESP32 `GND` | Breadboard Blue Rail | Black | Common Ground for all components |
-| **Left Radar** | `VIN` / `5V` | +5V Rail | Red | RCWL-0516 requires >4.0V VCC |
-| (RCWL-0516) | `GND` | GND Rail | Black | |
-| | `OUT` | **GPIO 32** | Yellow | 3.3V digital pulse (Active-HIGH) |
-| **Right Radar**| `VIN` / `5V` | +5V Rail | Red | |
-| (RCWL-0516) | `GND` | GND Rail | Black | |
-| | `OUT` | **GPIO 33** | White | 3.3V digital pulse (Active-HIGH) |
-| **Left IR** | `VCC` | +3.3V Rail | Orange | 3.3V recommended to protect ESP32 inputs |
-| (LM393 module)| `GND` | GND Rail | Black | |
-| | `OUT` | **GPIO 34** | Blue | Input-only pin (GPI). Active-LOW |
-| **Right IR** | `VCC` | +3.3V Rail | Orange | |
-| (LM393 module)| `GND` | GND Rail | Black | |
-| | `OUT` | **GPIO 35** | Green | Input-only pin (GPI). Active-LOW |
-| **Left Red LED**| Anode (+) | **GPIO 25** | Red | In series with 220Ω / 330Ω resistor to GND |
-| | Cathode (-) | GND Rail | Black | Flat edge / shorter leg to GND |
-| **Right Red LED**| Anode (+) | **GPIO 26** | Red | In series with 220Ω / 330Ω resistor to GND |
-| | Cathode (-) | GND Rail | Black | |
-| **Safe Green LED**| Anode (+) | **GPIO 27** | Green | In series with 220Ω / 330Ω resistor to GND |
-| | Cathode (-) | GND Rail | Black | Lit when system is in `STATE_SAFE` |
-| **Active Buzzer**| Positive (+) | **GPIO 14** | Purple | Direct drive or NPN transistor drive |
-| | Negative (-) | GND Rail | Black | |
-| **OLED Display**| `VCC` | +3.3V Rail | Orange | 3.3V logic power |
-| (SSD1306 0.96")| `GND` | GND Rail | Black | |
-| | `SDA` | **GPIO 21** | Brown | Default ESP32 hardware I2C Data |
-| | `SCL` | **GPIO 22** | Gray | Default ESP32 hardware I2C Clock |
-
----
-
-## 3. Step-by-Step Hardware Assembly Checklist
-
-### Step 1: Power & Ground Rails Setup
-1. Insert the ESP32 38-Pin DevKit into the breadboard so it straddles the center divider.
-2. Connect `GND` pin on the ESP32 to the breadboard blue/black negative power rail.
-3. Connect `VIN` (or `5V`) pin to the primary 5V red power rail.
-4. Connect `3V3` pin to an auxiliary 3.3V red rail.
-5. Place a 100 µF capacitor across the 5V and GND rail (pay attention to polarity: stripe to GND).
+### 2. Simple Component 1 Wiring Diagram
 
 ```mermaid
 graph LR
-    VIN["ESP32 VIN"] -->|Red Wire| RAIL5V["+5V Breadboard Rail"]
-    GND["ESP32 GND"] -->|Black Wire| RAILGND["GND Breadboard Rail"]
-    V33["ESP32 3V3"] -->|Orange Wire| RAIL3V["+3.3V Breadboard Rail"]
-    CAP["100µF Capacitor"] --- RAIL5V
-    CAP --- RAILGND
+    subgraph ESP32["ESP32 38-Pin DevKit"]
+        G27["GPIO 27"]
+        G25["GPIO 25"]
+        G26["GPIO 26"]
+        GND["GND Pin"]
+    end
+
+    subgraph Breadboard["Breadboard Circuit"]
+        LED_SAFE["🟢 Safe Green LED\n(Long leg to GPIO 27)"]
+        R_SAFE["330Ω Resistor"]
+
+        LED_LEFT["🔴 Left Red LED\n(Long leg to GPIO 25)"]
+        R_LEFT["330Ω Resistor"]
+
+        LED_RIGHT["🔴 Right Red LED\n(Long leg to GPIO 26)"]
+        R_RIGHT["330Ω Resistor"]
+
+        GND_RAIL["Common GND Rail (-)"]
+    end
+
+    G27 -->|Green Wire| LED_SAFE
+    LED_SAFE --> R_SAFE
+    R_SAFE --> GND_RAIL
+
+    G25 -->|Red Wire| LED_LEFT
+    LED_LEFT --> R_LEFT
+    R_LEFT --> GND_RAIL
+
+    G26 -->|Red/Yellow Wire| LED_RIGHT
+    LED_RIGHT --> R_RIGHT
+    R_RIGHT --> GND_RAIL
+
+    GND -->|Black Wire| GND_RAIL
 ```
 
-### Step 2: Wiring the Indicators (LEDs & Buzzer)
-1. **Left Warning LED:** Place Red LED. Connect Anode (longer leg) to **GPIO 25**. Connect Cathode to 330Ω resistor, then to GND rail.
-2. **Right Warning LED:** Place Red LED. Connect Anode to **GPIO 26**. Connect Cathode to 330Ω resistor, then to GND rail.
-3. **Safe Status LED:** Place Green LED. Connect Anode to **GPIO 27**. Connect Cathode to 330Ω resistor, then to GND rail.
-4. **Active Buzzer:** Connect positive pin marked `+` to **GPIO 14**. Connect negative pin to GND rail.
+---
 
-### Step 3: Wiring the I2C OLED Display
-1. Connect OLED `GND` to GND rail.
-2. Connect OLED `VCC` to 3.3V rail (**Do NOT connect 3.3V OLEDs to 5V**).
-3. Connect OLED `SDA` to **GPIO 21**.
-4. Connect OLED `SCL` to **GPIO 22**.
+### 3. Step-by-Step Connection Guide
 
-### Step 4: Wiring the Microwave Radar Modules (RCWL-0516)
-1. Position the two RCWL-0516 radar boards away from metal components.
-2. Connect `VIN` of both modules to the **5V rail** (RCWL-0516 requires $\ge 4\text{V}$ for stable RF oscillator operation).
-3. Connect `GND` to the common GND rail.
-4. Connect Left Radar `OUT` to **GPIO 32**.
-5. Connect Right Radar `OUT` to **GPIO 33**.
-
-### Step 5: Wiring the Infrared Obstacle Modules
-1. Connect `VCC` of both IR modules to the **3.3V rail** (ensures output signals never exceed 3.3V on GPIO inputs).
-2. Connect `GND` to the common GND rail.
-3. Connect Left IR `OUT` to **GPIO 34** (Notice: GPIO 34 is input-only).
-4. Connect Right IR `OUT` to **GPIO 35** (Notice: GPIO 35 is input-only).
+1. **Locate the Ground (GND) Pin:**
+   - Connect a black jumper wire from any `GND` pin on the ESP32 to the blue negative (`-`) rail of your breadboard.
+2. **Wire the Green Safe LED (`GPIO 27`):**
+   - Identify the LED legs: **Long leg = Anode (+)**, **Short leg / flat rim = Cathode (-)**.
+   - Insert the Green LED into the breadboard.
+   - Connect a jumper wire from **ESP32 GPIO 27** to the **Long leg (+)**.
+   - Connect a **330Ω resistor** from the **Short leg (-)** to the **GND rail**.
+3. **Wire the Left Red Alert LED (`GPIO 25`):**
+   - Insert a Red LED into the breadboard.
+   - Connect a jumper wire from **ESP32 GPIO 25** to the **Long leg (+)**.
+   - Connect a **330Ω resistor** from the **Short leg (-)** to the **GND rail**.
+4. **Wire the Right Red Alert LED (`GPIO 26`):**
+   - Insert the second Red LED into the breadboard.
+   - Connect a jumper wire from **ESP32 GPIO 26** to the **Long leg (+)**.
+   - Connect a **330Ω resistor** from the **Short leg (-)** to the **GND rail**.
 
 ---
 
-## 4. Hardware Verification & Multimeter Tests
+### 4. How to Flash and Test on Hardware
 
-Before flashing firmware with active logic:
-1. **Short-Circuit Check:**
-   - Unplug USB power.
-   - Set multimeter to continuity mode.
-   - Probe between 5V rail and GND rail. Verify no continuity (infinite resistance / no beep).
-   - Probe between 3.3V rail and GND rail. Verify no continuity.
-2. **Power Rail Voltage Verification:**
-   - Plug in USB cable.
-   - Measure DC voltage between GND and 5V rail: should read $4.8\text{V} - 5.2\text{V}$.
-   - Measure DC voltage between GND and 3.3V rail: should read $3.25\text{V} - 3.35\text{V}$.
-3. **IR Sensor Calibrated Baseline:**
-   - Place a hand or model car 10–15 cm in front of the IR sensor.
-   - Rotate the onboard trimpot potentiometer until the sensor onboard indicator LED turns ON when an object enters 12 cm, and OFF when removed.
-   - Measure DC voltage on OUT pin: should transition between $\approx 0\text{V}$ (detected) and $\approx 3.3\text{V}$ (clear).
+#### Step 1: Connect USB & Upload Firmware
+Plug your ESP32 into your computer via micro-USB, then run:
+```bash
+/opt/homebrew/bin/pio run -t upload
+```
+
+#### Step 2: Open Serial Monitor
+Open the PlatformIO serial monitor at 115200 baud:
+```bash
+/opt/homebrew/bin/pio device monitor -b 115200
+```
+
+#### Step 3: Observe Automatic Cycle
+You will see the console log each state transition every 3 seconds, and the LEDs will react in real time:
+1. **Seconds 0–3: `[STATE_SAFE]`**
+   - **Green LED:** Solid ON
+   - **Left Red LED:** OFF
+   - **Right Red LED:** OFF
+2. **Seconds 3–6: `[STATE_LEFT_WARNING]`**
+   - **Green LED:** OFF
+   - **Left Red LED:** Pulsing / Blinking (120 ms cadence)
+   - **Right Red LED:** OFF
+3. **Seconds 6–9: `[STATE_RIGHT_WARNING]`**
+   - **Green LED:** OFF
+   - **Left Red LED:** OFF
+   - **Right Red LED:** Pulsing / Blinking (120 ms cadence)
+4. **Seconds 9–12: `[STATE_BOTH_WARNING]`**
+   - **Green LED:** OFF
+   - **Left Red LED:** Solid ON
+   - **Right Red LED:** Solid ON
+   - *Cycle repeats automatically!*
+
+#### Step 4: Interactive Manual Testing
+In the Serial Monitor terminal, you can interact directly:
+* Type **`0`** and press Enter → Locks into `STATE_SAFE` (Green LED stays ON).
+* Type **`1`** and press Enter → Locks into `STATE_LEFT_WARNING` (Left Red pulses continuously).
+* Type **`2`** and press Enter → Locks into `STATE_RIGHT_WARNING` (Right Red pulses continuously).
+* Type **`3`** and press Enter → Locks into `STATE_BOTH_WARNING` (Both Red stay solid ON).
+* Type **`a`** and press Enter → Resumes automatic 3-second cycling.
 
 ---
 
-## 5. Live Hardware Status Matrix
+### 5. Troubleshooting Checklist
 
-| Subsystem | Target Pins | Wiring Status | Bench Verified | Notes / Next Step |
+| Symptom | Cause | Solution |
+| :--- | :--- | :--- |
+| **LED doesn't light up** | Reversed polarity | Rotate the LED 180° so the long leg connects to the ESP32 GPIO. |
+| **LED is extremely dim** | Resistor value too high | Ensure you are using 220Ω or 330Ω (Red-Red-Brown or Orange-Orange-Brown). Do not use 10kΩ. |
+| **Wrong LED blinks** | Swapped GPIO pins | Verify GPIO 25 is Left Red, GPIO 26 is Right Red, and GPIO 27 is Green. |
+| **ESP32 resets on boot** | Short circuit | Disconnect USB immediately. Check that resistors are not bridging +3.3V/5V directly to GND. |
+
+---
+
+## 6. Master Full-System Hardware Pinout Table (Reference)
+
+| Subsystem | Signal Name | ESP32 GPIO | Direction | Notes & Electrical Safety |
 | :--- | :--- | :--- | :--- | :--- |
-| **ESP32 Core & Power** | Vin, 3V3, GND | Defined in `config.h` | Verified with `pio run` | Power rails mapped and decoupling budgeted |
-| **LED Cluster** | GPIO 25, 26, 27 | Defined in `config.h` | Pending Bench Check | Current limit resistors (330Ω) required |
-| **Active Buzzer** | GPIO 14 | Defined in `config.h` | Pending Bench Check | Direct active-HIGH drive |
-| **SSD1306 OLED** | GPIO 21, 22 (I2C) | Defined in `config.h` | Verified with `pio run` | Bus address `0x3C`, 400 kHz fast mode |
-| **RCWL-0516 Radars** | GPIO 32, 33 | Defined in `config.h` | Pending Driver (Ph. 2)| Requires 5V VCC, 3.3V logic OUT |
-| **IR Obstacle Modules** | GPIO 34, 35 | Defined in `config.h` | Pending Driver (Ph. 2)| 3.3V VCC recommended, active-LOW default |
-| **Wi-Fi SoftAP** | Internal RF | Defined in `config.h` | Pending Server (Ph. 6)| SSID: `BlindSpottr-AP`, IP: `192.168.4.1` |
+| **Safe Green LED** | `PIN_LED_SAFE`| **GPIO 27** | Digital Output | Active-HIGH push-pull + 330Ω resistor |
+| **Left Red LED** | `PIN_LED_L` | **GPIO 25** | Digital Output | Active-HIGH push-pull + 330Ω resistor |
+| **Right Red LED**| `PIN_LED_R` | **GPIO 26** | Digital Output | Active-HIGH push-pull + 330Ω resistor |
+| **Active Buzzer** | `PIN_BUZZER` | **GPIO 14** | Digital Output | Component 2 target |
+| **Left IR Sensor** | `PIN_IR_L` | **GPIO 34** | Digital Input | Component 3 target (Input-only GPI) |
+| **Right IR Sensor**| `PIN_IR_R` | **GPIO 35** | Digital Input | Component 3 target (Input-only GPI) |
+| **Left Radar** | `PIN_RADAR_L` | **GPIO 32** | Digital Input | Component 4 target (RCWL-0516) |
+| **Right Radar** | `PIN_RADAR_R` | **GPIO 33** | Digital Input | Component 4 target (RCWL-0516) |
+| **OLED SDA** | `PIN_I2C_SDA` | **GPIO 21** | I2C Data | Component 5 target (0.96" SSD1306) |
+| **OLED SCL** | `PIN_I2C_SCL` | **GPIO 22** | I2C Clock | Component 5 target (0.96" SSD1306) |

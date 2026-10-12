@@ -172,7 +172,7 @@
 ## Phase 4: Cockpit Alert Actuation (LEDs, Buzzer, OLED)
 
 ### Task 4.1 — Non-Blocking Left, Right, and Safe LED Controller
-- **Status:** Pending
+- **Status:** **COMPLETED** (Component 1)
 - **Objective:** Create `src/outputs/indicators.*` to manage Red L/R alert LEDs and Green Safe LED without `delay()`.
 - **Why this is necessary:** Visual alerts must pulse or hold steady while OLED and sensors continue running smoothly.
 - **Prerequisites:** Task 1.2.
@@ -183,9 +183,9 @@
   3. In `STATE_LEFT_WARNING`: Left Red LED pulsed (120 ms cadence), Green OFF.
   4. In `STATE_RIGHT_WARNING`: Right Red LED pulsed (120 ms cadence), Green OFF.
   5. In `STATE_BOTH_WARNING`: Both Red LEDs solid ON, Green OFF.
-- **Expected files:** `src/outputs/indicators.h`, `src/outputs/indicators.cpp` (Proposed).
+- **Expected files:** `src/outputs/indicators.h`, `src/outputs/indicators.cpp`.
 - **Integration considerations:** Use `millis()` delta checks for blink timing.
-- **Testing & validation:** Logic inspection and bench verification.
+- **Testing & validation:** Verified with `pio run` and interactive serial bench harness in `src/main.cpp`.
 - **Acceptance criteria:** LEDs switch states immediately with zero blocking delays.
 - **GitHub tracking:** Issue #8.
 
