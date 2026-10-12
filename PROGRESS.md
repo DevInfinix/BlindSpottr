@@ -14,6 +14,8 @@
 - **Target Microcontroller:** ESP32 38-pin DevKit V1 (`esp32doit-devkit-v1`).
 - **Framework:** Arduino Framework on PlatformIO.
 - **Git Branch:** Initialized repository on `dev` (integration) and `main` (production).
+- **GitHub Remote:** `https://github.com/DevInfinix/BlindSpottr` (Public).
+- **Active GitHub Issues:** #1 (PlatformIO dependencies), #2 (Hardware pin configuration).
 
 ---
 
