@@ -1,9 +1,6 @@
-# BlindSpottr 🚛 — Intelligent Blind-Spot Monitoring System
+# BlindSpottr: Blind-Spot Monitoring System
 
 <div align="center">
-
-![BlindSpottr Banner](https://img.shields.io/badge/BlindSpottr-Intelligent%20BSM-blue?style=for-the-badge&logo=espressif&logoColor=white)
-<br/>
 
 [![PlatformIO](https://img.shields.io/badge/PlatformIO-Core%206.2.0-orange.svg?style=flat-square&logo=platformio)](https://platformio.org/)
 [![Target MCU](https://img.shields.io/badge/MCU-ESP32%20DevKit%20V1-red.svg?style=flat-square&logo=espressif)](https://www.espressif.com/en/products/socs/esp32)
@@ -14,96 +11,87 @@
 [![License](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
 <p align="center">
-  <b>A real-time, non-blocking Blind-Spot Monitoring (BSM) prototype built for scale-model trucks and automotive robotics, featuring dynamic graphical OLED telemetry, dual-zone optical presence sensing, and multi-frequency acoustic threat arbitration.</b>
+  A blind-spot monitoring prototype for scale-model trucks using an ESP32, dual optical presence sensors, an SSD1306 OLED display, and multi-frequency buzzer alerts.
 </p>
 
 </div>
 
 ---
 
-## 📖 Table of Contents
+## Table of contents
 
-- [Overview & Problem Statement](#-overview--problem-statement)
-- [Key Features](#-key-features)
-- [System Architecture](#-system-architecture)
-- [OLED Graphical Dashboard](#-oled-graphical-dashboard)
-- [Multi-Tone Acoustic Alert Engine](#-multi-tone-acoustic-alert-engine)
-- [Hardware Pinout & Circuit Interfacing](#-hardware-pinout--circuit-interfacing)
-- [Finite State Machine (FSM)](#-finite-state-machine-fsm)
-- [Getting Started](#-getting-started)
-- [Project Structure](#-project-structure)
-- [Future Enhancements](#-future-enhancements)
-- [License](#-license)
+- [Overview](#overview)
+- [Design choices](#design-choices)
+- [System architecture](#system-architecture)
+- [Display interface](#display-interface)
+- [Audio alert patterns](#audio-alert-patterns)
+- [Hardware pinout and wiring](#hardware-pinout-and-wiring)
+- [State machine](#state-machine)
+- [Building and flashing](#building-and-flashing)
+- [Project structure](#project-structure)
+- [Planned additions](#planned-additions)
+- [License](#license)
 
 ---
 
-## 🔍 Overview & Problem Statement
+## Overview
 
-Blind spots are responsible for a significant fraction of commercial vehicle collisions during lane changes and tight turning maneuvers. Standard hobby obstacle detection projects rely on blocking delays (`delay()`) or simple single-sensor thresholds that freeze display updates and trigger annoying, mono-pitch buzzing.
+Side mirrors leave blind spots where overtaking vehicles disappear from a driver's peripheral view. In scale models and robotics, simple obstacle detection scripts often rely on `delay()`, which halts execution, starves sensor reads, and causes display stutter.
 
-**BlindSpottr** implements an automotive-grade, non-blocking firmware architecture that:
-- Continuously polls dual-side optical sensors at **100 Hz** without blocking or jitter.
-- Uses **hardware LEDC PWM** to synthesize distinct musical pitches for Left, Right, and Dual-hazard warnings.
-- Renders an **interactive 16 FPS pixel-art dashboard** with top-down vehicle silhouettes and dynamic radar waves on an SSD1306 OLED display.
-- Gracefully tolerates I2C disconnections without stalling sensor loops or audio alerts.
+BlindSpottr uses a non-blocking loop running on an ESP32. It samples two infrared distance sensors at 100 Hz, updates an SSD1306 OLED display with animated top-down telemetry, and drives a buzzer using hardware PWM at different pitches depending on which side detects an obstacle.
 
 ```text
-    [ LEFT BLIND SPOT ]                     [ RIGHT BLIND SPOT ]
+    [ Left blind spot ]                     [ Right blind spot ]
      TCRT5000 / LM393                        TCRT5000 / LM393
      Optical Sensor                          Optical Sensor
            │                                       │
-     (GPIO 35 input)                         (GPIO 34 input)
+     (GPIO 34 input)                         (GPIO 35 input)
            └──────────────────┐ ┌──────────────────┘
                               ▼ ▼
                   ┌─────────────────────────┐
-                  │   ESP32 DUAL-CORE MCU   │
-                  │  100 Hz Non-Blocking    │
-                  │   Deterministic FSM     │
+                  │   ESP32 DevKit V1 MCU   │
+                  │   100 Hz non-blocking   │
+                  │    state arbitration    │
                   └───────────┬─────────────┘
                               │
              ┌────────────────┴────────────────┐
              ▼                                 ▼
-   [ OLED DASHBOARD ]                  [ ACTIVE/PASSIVE BUZZER ]
-  128x64 SSD1306 (I2C)                 GPIO 25 (Hardware PWM)
-  - Top-down truck view                - Left:  2200 Hz Pulsed
-  - Animated radar waves               - Right: 2900 Hz Pulsed
-  - Dynamic chevron alerts             - Dual:  3400/2400 Hz Warble
+       [ OLED HUD ]                    [ Hardware buzzer ]
+   128x64 SSD1306 (I2C)              GPIO 25 (LEDC PWM timer)
+   - Top-down truck graphic          - Left:  2200 Hz pulsed
+   - Animated radar waves            - Right: 2900 Hz pulsed
+   - Forward road guides             - Dual:  3400/2400 Hz chirp
 ```
 
 ---
 
-## ⚡ Key Features
+## Design choices
 
-- **Zero-Delay Architecture**: Completely free of `delay()` calls during runtime loops. Uses wrap-safe `millis()` delta timers for predictable scheduling.
-- **Dynamic Graphical HUD**: Custom 128×64 OLED display driver featuring a top-down truck wireframe, side mirrors, wheels, and animated outward-pulsing radar waves.
-- **Multi-Frequency Acoustic Feedback**:
-  - **Left Obstacle**: 2200 Hz mid-range pulsed tone (100 ms ON / 120 ms OFF).
-  - **Right Obstacle**: 2900 Hz high-frequency warning tone (100 ms ON / 120 ms OFF).
-  - **Dual Hazard**: Rapid alternating warble alarm switching between 3400 Hz and 2400 Hz every 50 ms.
-  - **Clear Road**: Immediate, clean acoustic silence.
-- **Fail-Safe I2C Engine**: Bus timeout protection (`Wire.setTimeOut(50)`) and auto-scanning across addresses `0x3C` and `0x3D`. If the screen is disconnected, sensing and sound continue flawlessly.
-- **Hardware Agnostic Buzzer Driver**: Supports both active piezo buzzers and passive electromagnetic transducers via ESP32 LEDC PWM.
+- Non-blocking loop: The firmware uses timestamp arithmetic with `millis()` rather than `delay()`. Sensor polling, display refreshes, and buzzer cadences run independently.
+- Tone separation: Left and right warnings use different sound frequencies. A driver can tell which side has an obstacle by pitch alone.
+- Isolated I2C handling: The display controller sets a 50 ms bus timeout and scans for device addresses at startup. If the screen disconnects or glitches, sensor polling and audio alerts keep running.
+- Noise filtering: Raw sensor reads pass through a 15 ms debouncer before triggering a state change, filtering out transient reflections.
 
 ---
 
-## 🏗 System Architecture
+## System architecture
 
 ```mermaid
 graph TD
-    subgraph SENSORS ["Sensing Subsystem (100 Hz)"]
-        IR_L["Left Optical Sensor (GPIO 35)"]
-        IR_R["Right Optical Sensor (GPIO 34)"]
+    subgraph SENSORS ["Sensing subsystem (100 Hz)"]
+        IR_L["Left optical sensor (GPIO 34)"]
+        IR_R["Right optical sensor (GPIO 35)"]
     end
 
-    subgraph ENGINE ["Firmware State Machine & Logic"]
-        DEB["Non-Blocking Glitch Filter (15 ms)"]
-        FSM{"Deterministic FSM Resolver"}
+    subgraph ENGINE ["State machine"]
+        DEB["Software glitch filter (15 ms)"]
+        FSM{"State evaluation"}
     end
 
-    subgraph ACTUATION ["Cockpit Alert Subsystem"]
-        BUZZ["Buzzer Controller (GPIO 25)\n- 2200 Hz (Left)\n- 2900 Hz (Right)\n- 3400/2400 Hz (Both)"]
-        OLED["SSD1306 Display Controller\n- 400 kHz Fast I2C (GPIO 21/22)\n- 16 FPS Graphic Refresh"]
-        UART["Serial Telemetry\n- 115200 Baud Diagnostic Stream"]
+    subgraph ACTUATION ["Outputs"]
+        BUZZ["Buzzer driver (GPIO 25)\n2200 Hz Left / 2900 Hz Right / Alternating dual"]
+        OLED["SSD1306 controller\n400 kHz I2C (GPIO 21/22)\nAnimated frame refresh"]
+        UART["Serial telemetry\n115200 baud diagnostic stream"]
     end
 
     IR_L --> DEB
@@ -121,9 +109,9 @@ graph TD
 
 ---
 
-## 🖥 OLED Graphical Dashboard
+## Display interface
 
-The SSD1306 128×64 monochrome OLED renders an automotive HUD tailored for rapid driver recognition:
+The 128x64 OLED layout centers on a top-down view of the truck chassis, showing animated road markers and radar wave pulses:
 
 ```text
 +-------------------------------------------------------+
@@ -139,125 +127,125 @@ The SSD1306 128×64 monochrome OLED renders an automotive HUD tailored for rapid
 +-------------------------------------------------------+
 ```
 
-### Visual Modes:
-1. **ROAD CLEAR**: Symmetrical dotted road lines flank the truck with `>>> ROAD CLEAR <<<` banner.
-2. **LEFT HAZARD**: Inverted `[!] L` badge on left edge, animated left radar waves pulsing outward from the mirror, and bottom inverted alert banner.
-3. **RIGHT HAZARD**: Inverted `[!] R` badge on right edge, animated right radar waves pulsing outward, and right chevron indicators.
-4. **DUAL HAZARD**: Both side waves pulse concurrently with high-visibility flashing `!! DUAL SIDE WARN !!` banner.
+Display states:
+- Road clear: Dotted road lines flow past the truck cab, with a centered status label.
+- Left obstacle: Radar pulses expand outward to the left, an inverted badge marks the left corner, and chevrons point left along the header.
+- Right obstacle: Radar pulses expand outward to the right, with a matching badge on the right corner.
+- Both obstacles: Radar waves pulse on both sides, and the bottom banner alternates colors for contrast.
 
 ---
 
-## 🎵 Multi-Tone Acoustic Alert Engine
+## Audio alert patterns
 
-Different hazard directions demand different acoustic signatures so drivers can react without looking down:
+The buzzer module connects to GPIO 25 and runs through ESP32 hardware PWM (LEDC channel 0). Tone frequencies and durations differ by obstacle location:
 
-| Threat State | Frequency | Cadence | Acoustic Feel |
+| State | Frequency | Cadence | Tone description |
 | :--- | :--- | :--- | :--- |
-| **Clear Road** | `0 Hz` | Silent | Quiet cockpit |
-| **Left Blind Spot** | `2200 Hz` | 100 ms ON / 120 ms OFF | Rhythmic mid-range pulse |
-| **Right Blind Spot** | `2900 Hz` | 100 ms ON / 120 ms OFF | Piercing high-pitch alert |
-| **Both Sides Blocked** | `3400 Hz ⇄ 2400 Hz` | 50 ms / 50 ms toggle | Rapid two-tone warble alarm |
+| Clear | Silent | Off | No output |
+| Left obstacle | 2200 Hz | 100 ms on, 120 ms off | Steady mid-pitch pulse |
+| Right obstacle | 2900 Hz | 100 ms on, 120 ms off | High-pitch pulse |
+| Both sides blocked | 3400 Hz and 2400 Hz | 50 ms per step | Rapid alternating chirp |
 
 ---
 
-## 📌 Hardware Pinout & Circuit Interfacing
+## Hardware pinout and wiring
 
-| Subsystem | Signal Name | ESP32 GPIO | Direction | Electrical Notes |
+| Subsystem | Signal | ESP32 GPIO | Pin type | Wiring note |
 | :--- | :--- | :---: | :---: | :--- |
-| **Left IR Sensor** | `PIN_IR_LEFT` | **GPIO 35** | Input | Input-only pin (GPI). Active-LOW optical comparator |
-| **Right IR Sensor** | `PIN_IR_RIGHT` | **GPIO 34** | Input | Input-only pin (GPI). Active-LOW optical comparator |
-| **Cockpit Buzzer** | `PIN_BUZZER` | **GPIO 25** | Output | Driven by ESP32 LEDC PWM (Channel 0, 8-bit) |
-| **OLED SDA** | `PIN_OLED_SDA` | **GPIO 21** | I2C Data | 3.3V logic, default hardware Wire |
-| **OLED SCL** | `PIN_OLED_SCL` | **GPIO 22** | I2C Clock | 3.3V logic, 400 kHz Fast Mode |
-| **US TRIG (Optional)**| `PIN_US_TRIG` | **GPIO 26** | Output | 10µs ultrasonic trigger pulse |
-| **US ECHO (Optional)**| `PIN_US_ECHO` | **GPIO 36** | Input | Bounded timeout (~3m). Requires voltage divider! |
+| Left IR sensor | `PIN_IR_LEFT` | GPIO 34 | Input | Input-only pin (GPI). Active-low digital signal |
+| Right IR sensor | `PIN_IR_RIGHT` | GPIO 35 | Input | Input-only pin (GPI). Active-low digital signal |
+| Buzzer | `PIN_BUZZER` | GPIO 25 | Output | Driven by LEDC PWM, 8-bit duty resolution |
+| OLED SDA | `PIN_OLED_SDA` | GPIO 21 | I2C Data | 3.3V logic, standard hardware Wire |
+| OLED SCL | `PIN_OLED_SCL` | GPIO 22 | I2C Clock | 3.3V logic, 400 kHz fast mode |
+| Ultrasonic trigger (optional) | `PIN_US_TRIG` | GPIO 26 | Output | 10 microsecond trigger pulse |
+| Ultrasonic echo (optional) | `PIN_US_ECHO` | GPIO 36 | Input | Requires external resistor divider for 3.3V safety |
 
-> ⚠️ **Electrical Notice**: GPIO 34 and GPIO 35 are input-only pins on the ESP32 silicon and do not possess internal software pull-up resistors. Ensure your IR sensor breakout modules have onboard pull-ups (standard on LM393 modules).
+GPIO 34 and GPIO 35 are input-only pins on the ESP32 and lack internal pull-up resistors. Use sensor breakout boards with their own pull-up resistors on the comparator outputs.
 
 ---
 
-## 🔄 Finite State Machine (FSM)
+## State machine
 
 ```mermaid
 stateDiagram-v2
     [*] --> SAFE_CLEAR
 
-    SAFE_CLEAR --> WARN_LEFT : Left Sensor Triggered
-    SAFE_CLEAR --> WARN_RIGHT : Right Sensor Triggered
-    SAFE_CLEAR --> WARN_BOTH : Both Sensors Triggered
+    SAFE_CLEAR --> WARN_LEFT : Left sensor active
+    SAFE_CLEAR --> WARN_RIGHT : Right sensor active
+    SAFE_CLEAR --> WARN_BOTH : Both sensors active
 
-    WARN_LEFT --> SAFE_CLEAR : Left Sensor Cleared
-    WARN_LEFT --> WARN_BOTH : Right Sensor Triggered
+    WARN_LEFT --> SAFE_CLEAR : Left sensor clears
+    WARN_LEFT --> WARN_BOTH : Right sensor active
 
-    WARN_RIGHT --> SAFE_CLEAR : Right Sensor Cleared
-    WARN_RIGHT --> WARN_BOTH : Left Sensor Triggered
+    WARN_RIGHT --> SAFE_CLEAR : Right sensor clears
+    WARN_RIGHT --> WARN_BOTH : Left sensor active
 
-    WARN_BOTH --> WARN_LEFT : Right Sensor Cleared
-    WARN_BOTH --> WARN_RIGHT : Left Sensor Cleared
-    WARN_BOTH --> SAFE_CLEAR : Both Sensors Cleared
+    WARN_BOTH --> WARN_LEFT : Right sensor clears
+    WARN_BOTH --> WARN_RIGHT : Left sensor clears
+    WARN_BOTH --> SAFE_CLEAR : Both sensors clear
 ```
 
 ---
 
-## 🚀 Getting Started
+## Building and flashing
 
 ### Prerequisites
-- [Visual Studio Code](https://code.visualstudio.com/) with the **PlatformIO IDE** extension.
-- ESP32 Development Board (NodeMCU / DevKit V1 38-Pin).
-- 2× Digital IR Obstacle Modules (LM393 / TCRT5000).
-- 1× 0.96" SSD1306 128×64 I2C OLED Display.
-- 1× Active or Passive Buzzer module.
+- Visual Studio Code with the PlatformIO IDE extension, or PlatformIO Core CLI.
+- ESP32 development board (38-pin DevKit V1).
+- Two digital infrared obstacle modules (TCRT5000 or LM393 comparator).
+- One 0.96 inch SSD1306 I2C OLED display (128x64).
+- One active or passive buzzer module.
 
-### Build and Flash
+### Commands
+
 1. Clone the repository:
    ```bash
-   git clone https://github.com/devinfinix/BlindSpottr.git
+   git clone https://github.com/DevInfinix/BlindSpottr.git
    cd BlindSpottr
    ```
 
-2. Compile the project with PlatformIO:
+2. Compile the firmware:
    ```bash
    pio run
    ```
 
-3. Flash to ESP32:
+3. Upload to the connected ESP32:
    ```bash
    pio run --target upload
    ```
 
-4. Launch the Serial Monitor (115200 Baud):
+4. Open the serial monitor:
    ```bash
    pio device monitor --baud 115200
    ```
 
 ---
 
-## 📁 Project Structure
+## Project structure
 
 ```text
 BlindSpottr/
-├── platformio.ini              # PlatformIO environments & library dependencies
+├── platformio.ini         # PlatformIO build flags and library dependencies
 ├── include/
-│   └── config.h                # Authoritative hardware pinouts, cadences & timings
+│   └── config.h           # Pin allocations, frequencies, and loop timing constants
 ├── src/
-│   ├── main.cpp                # Main non-blocking orchestration & UART telemetry
-│   ├── sensors.h / .cpp        # Independent debounced IR sensor acquisition
-│   ├── display.h / .cpp        # Graphic OLED top-down HUD & animation engine
-│   └── buzzer.h / .cpp         # Multi-tone LEDC PWM acoustic driver
-└── docs/                       # Project specifications & architecture docs
+│   ├── main.cpp           # Loop orchestration and serial telemetry output
+│   ├── sensors.h / .cpp   # Debounced optical sensor reading
+│   ├── display.h / .cpp   # OLED HUD rendering and animation
+│   └── buzzer.h / .cpp    # Multi-frequency buzzer driver using LEDC PWM
+└── docs/                  # Architecture and technical reference documents
 ```
 
 ---
 
-## 💡 Future Enhancements
+## Planned additions
 
-- [ ] **Microwave Radar Fusion**: Integrate dual RCWL-0516 Doppler radar modules to detect high-speed approaching vehicles up to 7 meters away.
-- [ ] **Front Collision Warning**: Re-enable front HC-SR04 ultrasonic sensor with dynamic distance bar in OLED HUD.
-- [ ] **Web Dashboard**: ESP32 Wi-Fi SoftAP broadcasting real-time WebSocket vehicle telemetry to a driver's mobile browser.
-- [ ] **Turn-Signal Blind-Spot Camera**: Integrate ESP32-CAM to stream live side-mirror video when turn signals are engaged.
+- Doppler radar: Adding RCWL-0516 microwave modules alongside the optical sensors to detect approaching objects before they enter the close-range blind zone.
+- Front obstacle detection: Connecting an HC-SR04 sensor to the bumper to measure distance ahead of the truck.
+- Turn signal escalation: Reading left and right turn signal inputs so the buzzer alerts only when the driver signals into an occupied lane.
 
 ---
 
-## 📜 License
+## License
 
-Distributed under the **MIT License**. See `LICENSE` for more information.
+This project is licensed under the MIT License. See `LICENSE` for details.
