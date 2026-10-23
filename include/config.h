@@ -12,9 +12,9 @@
 
 // Left & Right Digital IR Obstacle Sensors
 // Verified physical pin assignments on chassis:
-// (GPIO 35 corresponds to physical Left side, GPIO 34 corresponds to physical Right side)
-constexpr uint8_t PIN_IR_LEFT             = 35; // Physical Left IR input
-constexpr uint8_t PIN_IR_RIGHT            = 34; // Physical Right IR input
+// GPIO 34 corresponds to the Left side, GPIO 35 corresponds to the Right side
+constexpr uint8_t PIN_IR_LEFT             = 34; // Physical Left IR input
+constexpr uint8_t PIN_IR_RIGHT            = 35; // Physical Right IR input
 
 // HC-SR04 Front Ultrasonic Sensor (Optional / physically disabled when not plugged)
 constexpr uint8_t PIN_US_TRIG             = 26;
