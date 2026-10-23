@@ -14,12 +14,12 @@ public:
      * @param pinLeft GPIO for Left Red warning LED (default PIN_LED_L)
      * @param pinRight GPIO for Right Red warning LED (default PIN_LED_R)
      * @param pinSafe GPIO for Safe Green status LED (default PIN_LED_SAFE)
-     * @param pulseMs Blink half-period in milliseconds (default SINGLE_WARN_PULSE_MS)
+     * @param pulseMs Blink half-period in milliseconds (default BUZZER_SIDE_ON_MS)
      */
     IndicatorController(uint8_t pinLeft = PIN_LED_L,
                         uint8_t pinRight = PIN_LED_R,
                         uint8_t pinSafe = PIN_LED_SAFE,
-                        uint32_t pulseMs = SINGLE_WARN_PULSE_MS);
+                        uint32_t pulseMs = BUZZER_SIDE_ON_MS);
 
     /**
      * @brief Configures GPIO pins as outputs and ensures safe initial state.

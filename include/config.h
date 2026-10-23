@@ -3,83 +3,76 @@
 
 /**
  * @file config.h
- * @brief Authoritative Hardware Pinouts, Timing Constants, and Network Configuration.
- * 
- * Sourced from docs/flow.md. All GPIO pinouts are fixed to the physical wiring harness.
- * Strapping pins (GPIO 0, 2, 12, 15) must NEVER be used.
- * Pins 34 and 35 are input-only (GPI) and do NOT have internal pull-up/pull-down resistors.
+ * @brief Centralized Hardware Configuration for BlindSpottr Toy-Truck BSM.
  */
 
 // =============================================================================
 // 1. HARDWARE GPIO PIN ALLOCATION (ESP32 DevKit V1 38-Pin)
 // =============================================================================
 
-// Radar Sensors (RCWL-0516 Microwave Doppler)
-// Active-HIGH digital pulses on motion detection
-#define PIN_RADAR_L             32  // Left blind-spot radar input
-#define PIN_RADAR_R             33  // Right blind-spot radar input
+// Left & Right Digital IR Obstacle Sensors
+// Verified physical pin assignments on chassis:
+// (GPIO 35 corresponds to physical Left side, GPIO 34 corresponds to physical Right side)
+constexpr uint8_t PIN_IR_LEFT             = 35; // Physical Left IR input
+constexpr uint8_t PIN_IR_RIGHT            = 34; // Physical Right IR input
 
-// Infrared Sensors (TCRT5000 / LM393 Optical Presence)
-// Input-only pins on ESP32 silicon (GPI)
-#define PIN_IR_L                34  // Left blind-spot IR input
-#define PIN_IR_R                35  // Right blind-spot IR input
+// HC-SR04 Front Ultrasonic Sensor (Optional / physically disabled when not plugged)
+constexpr uint8_t PIN_US_TRIG             = 26;
+constexpr uint8_t PIN_US_ECHO             = 36; // Reassigned away from 34 to avoid conflict
+constexpr bool ENABLE_ULTRASONIC          = false; // Set to true when HC-SR04 is plugged in
 
-// Cockpit Visual Indicators (Push-pull active-HIGH, 330Ω current-limiting resistors)
-#define PIN_LED_L               25  // Left warning LED (Red)
-#define PIN_LED_R               26  // Right warning LED (Red)
-#define PIN_LED_SAFE            27  // Safe status LED (Green)
+// I2C OLED Display (0.96" SSD1306, 128x64 Monochrome)
+constexpr uint8_t PIN_OLED_SDA            = 21;
+constexpr uint8_t PIN_OLED_SCL            = 22;
+constexpr uint8_t OLED_I2C_ADDR           = 0x3C;
+constexpr uint8_t SCREEN_WIDTH            = 128;
+constexpr uint8_t SCREEN_HEIGHT           = 64;
 
-// Cockpit Audible Alert (Active buzzer, active-HIGH)
-#define PIN_BUZZER              14  // Buzzer alert output
+// Cockpit Audible Alert (Buzzer output on GPIO 25 via ESP32 LEDC PWM)
+constexpr uint8_t PIN_BUZZER              = 25;
+constexpr uint8_t BUZZER_LEDC_CHANNEL     = 0;
+constexpr uint8_t BUZZER_LEDC_RESOLUTION  = 8;     // 8-bit resolution (0..255)
 
-// OLED Display (0.96" SSD1306, 128x64 Monochrome over I2C)
-#define PIN_I2C_SDA             21  // ESP32 default hardware I2C Data
-#define PIN_I2C_SCL             22  // ESP32 default hardware I2C Clock
-#define OLED_I2C_ADDR           0x3C
-#define SCREEN_WIDTH            128
-#define SCREEN_HEIGHT           64
-
-// =============================================================================
-// 2. SENSING, TIMING & FUSION CONSTANTS
-// =============================================================================
-
-// Real-Time Sensing Task Cadence (FreeRTOS Core 0)
-#define SENSING_CADENCE_MS      20    // 50 Hz loop frequency
-
-// Radar Hold Duration
-// Latch active status for 3000 ms to bridge moving-to-stopped vehicle transition
-#define RADAR_HOLD_MS           3000
-
-// IR Sensor Polarity & Filtering
-// Most LM393 comparator modules pull LOW when an obstacle reflects IR light
-#define IR_DETECT_LEVEL         LOW   // Change to HIGH if hardware batch is active-high
-#define IR_DEBOUNCE_MS          30    // Glitch suppression window
-
-// Alert Cadence Durations (Non-Blocking Timing)
-#define SINGLE_WARN_PULSE_MS    120   // Blink/beep period for Left or Right hazard
-#define BOTH_WARN_PULSE_MS      60    // Rapid pulse period for Dual Hazard
+// Cockpit Optional Indicator LEDs (legacy/header references)
+constexpr uint8_t PIN_LED_L               = 18;
+constexpr uint8_t PIN_LED_R               = 19;
+constexpr uint8_t PIN_LED_SAFE            = 23;
+constexpr uint32_t BUZZER_SIDE_ON_MS      = 100;
 
 // =============================================================================
-// 3. FREERTOS TASK CONFIGURATION
+// 2. SENSOR TIMING & POLARITY
 // =============================================================================
 
-#define SENSOR_TASK_STACK_SIZE  4096
-#define SENSOR_TASK_PRIORITY    3     // Higher than idle loop
-#define SENSOR_TASK_CORE        0     // Dedicated Core 0 for zero-jitter sensing
+// Standard LM393 IR modules output LOW on object detection
+constexpr uint8_t IR_LEFT_ACTIVE_LEVEL    = LOW;
+constexpr uint8_t IR_RIGHT_ACTIVE_LEVEL   = LOW;
+
+constexpr uint32_t IR_SAMPLE_INTERVAL_MS  = 10;   // 100 Hz sampling rate
+constexpr uint32_t IR_DEBOUNCE_MS         = 15;   // Glitch filter window
 
 // =============================================================================
-// 4. WI-FI SOFTAP & TELEMETRY CONFIGURATION
+// 3. BUZZER FREQUENCY VARIATIONS & PATTERNS
 // =============================================================================
 
-#define WIFI_AP_SSID            "BlindSpottr-AP"
-#define WIFI_AP_PASS            "blindspot123"
-#define WIFI_AP_CHANNEL         6
-#define WIFI_MAX_CLIENTS        4
+// Distinct acoustic pitch for each warning state:
+// - Left Hazard: 2200 Hz tone (Mid-high tone, rhythmic pulsed cadence)
+// - Right Hazard: 2900 Hz tone (Sharper high tone, alternating cadence)
+// - Dual Hazard (Both Sides): Rapid dual-chirp switching between 2400 Hz and 3400 Hz!
+constexpr uint32_t BUZZER_FREQ_LEFT_HZ    = 2200;
+constexpr uint32_t BUZZER_FREQ_RIGHT_HZ   = 2900;
+constexpr uint32_t BUZZER_FREQ_DUAL_LO_HZ = 2400;
+constexpr uint32_t BUZZER_FREQ_DUAL_HI_HZ = 3400;
 
-// Static Network Gateway
-#define WIFI_AP_IP              192, 168, 4, 1
-#define WIFI_AP_GW              192, 168, 4, 1
-#define WIFI_AP_MASK            255, 255, 255, 0
+// Cadence timings in milliseconds:
+constexpr uint32_t BUZZER_SINGLE_ON_MS    = 100;
+constexpr uint32_t BUZZER_SINGLE_OFF_MS   = 120;
 
-// WebSocket Telemetry Heartbeat (Core 1)
-#define WS_HEARTBEAT_MS         200   // Periodic telemetry broadcast interval
+constexpr uint32_t BUZZER_DUAL_CHIRP_MS   = 50;  // Ultra-rapid alert burst
+
+// =============================================================================
+// 4. DISPLAY REFRESH & SERIAL DIAGNOSTICS
+// =============================================================================
+
+constexpr uint32_t OLED_REFRESH_INTERVAL_MS = 60;    // ~16 FPS smooth animation
+constexpr uint32_t SERIAL_BAUD              = 115200;
+constexpr uint32_t DIAGNOSTICS_INTERVAL_MS  = 250;
