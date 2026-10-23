@@ -172,8 +172,8 @@ void DisplayController::renderDashboard(const SensorData& data, BsmState state, 
     _display.print(F("BLINDSPOTTR"));
     _display.drawLine(0, 9, 127, 9, SSD1306_WHITE);
 
-    // Dynamic warning arrows in header
-    drawWarningChevrons(data.leftObstacle, data.rightObstacle, _animPhase);
+    // Dynamic warning arrows in header (swapped so perspective matches top-down viewing angle)
+    drawWarningChevrons(data.rightObstacle, data.leftObstacle, _animPhase);
 
     // 2. FORWARD SCANNING RADAR ARCS / FORWARD MOTION BEAMS (Front of truck)
     // Moving radar pulses emitting ahead of the truck cab
@@ -188,8 +188,10 @@ void DisplayController::renderDashboard(const SensorData& data, BsmState state, 
     }
 
     // 3. CENTER GRAPHIC: TOY TRUCK & BLIND SPOT ZONES
+    // Swapped side arguments (data.rightObstacle, data.leftObstacle) so graphic waves
+    // appear on the correct physical side from your overhead viewing orientation
     drawTruckChassis(cx, cy);
-    drawBlindSpotWaves(data.leftObstacle, data.rightObstacle, _animPhase);
+    drawBlindSpotWaves(data.rightObstacle, data.leftObstacle, _animPhase);
 
     // 4. BOTTOM BANNER
     _display.drawLine(0, 50, 127, 50, SSD1306_WHITE);
