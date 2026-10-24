@@ -1,253 +1,147 @@
-# BlindSpottr — System Architecture Specification
+# BlindSpottr: System Architecture and Hardware Wiring
 
-> **AUTHORITY:** This document details the hardware and software architecture of the BlindSpottr system. For operational agent rules, see `AGENTS.md`. For authoritative technical requirements and pinouts, see `docs/flow.md`.
+This document illustrates the complete physical and functional architecture of the BlindSpottr prototype, including a 2D wiring layout, pin-by-pin hardware mapping, signal data flows, and firmware structure.
 
 ---
 
-## 1. System Architecture Overview
+## 1. 2D Physical Layout and Component Wiring
 
-BlindSpottr is an intelligent, dual-core embedded monitoring system implemented on an Espressif ESP32 microcontroller (`esp32doit-devkit-v1`). The architecture is split across hardware sensing, real-time sensor fusion, local alert actuation, and an isolated wireless telemetry pipeline.
+Below is a 2D visual representation of the ESP32 microcontroller board and all connected peripheral components. It shows how the hardware modules wire into the specific header pins of the 38-pin DevKit V1.
 
-```mermaid
-graph TB
-    subgraph Hardware_Inputs["Hardware Inputs"]
-        RL["Left RCWL-0516 Radar (GPIO 32)"]
-        RR["Right RCWL-0516 Radar (GPIO 33)"]
-        IL["Left IR Sensor (GPIO 34)"]
-        IR["Right IR Sensor (GPIO 35)"]
-    end
-
-    subgraph ESP32_Core0["ESP32 Core 0: Real-Time Sensing & Fusion (50 Hz)"]
-        HAL["GPIO Hardware Abstraction"]
-        FUSION["Sensor Fusion Engine\n(occupied = IR || Radar_Hold)"]
-        FSM["Global 4-State Machine\n(SAFE / LEFT / RIGHT / BOTH)"]
-        INDICATORS["Local Output Drivers\n(LEDs GPIO 25/26/27, Buzzer GPIO 14)"]
-    end
-
-    subgraph Thread_Safe_State["Thread-Safe Shared State"]
-        STATE["SystemState Struct\n(Atomic / Critical Section Protected)"]
-    end
-
-    subgraph ESP32_Core1["ESP32 Core 1: Display & Connectivity Loop"]
-        OLED["SSD1306 OLED Display Driver\n(I2C: GPIO 21/22 - 10-20 Hz)"]
-        WIFI["Wi-Fi Access Point\n(SSID: BlindSpottr-AP)"]
-        SERVER["AsyncWebServer & WebSockets\n(Port 80, /ws endpoint)"]
-        HTML["Embedded PROGMEM Dashboard\n(Single-Page HTML/CSS/JS)"]
-    end
-
-    subgraph User_Interfaces["External Interfaces"]
-        PHONE["Driver Mobile Phone Browser\n(http://192.168.4.1)"]
-        PHYSICAL["Vehicle Cockpit / Dash\n(LED Cluster, Active Buzzer, OLED)"]
-    end
-
-    RL --> HAL
-    RR --> HAL
-    IL --> HAL
-    IR --> HAL
-
-    HAL --> FUSION
-    FUSION --> FSM
-    FSM --> INDICATORS
-    FSM --> STATE
-
-    STATE --> OLED
-    STATE --> SERVER
-
-    INDICATORS --> PHYSICAL
-    OLED --> PHYSICAL
-    WIFI --> PHONE
-    SERVER <-->|WebSocket JSON Push| PHONE
-    HTML -->|HTTP GET /| PHONE
+```text
+ ┌─────────────────────────┐                                 ┌─────────────────────────┐
+ │   LEFT IR SENSOR        │                                 │   RIGHT IR SENSOR       │
+ │   (TCRT5000 / LM393)    │                                 │   (TCRT5000 / LM393)    │
+ │  ┌───────────────────┐  │                                 │  ┌───────────────────┐  │
+ │  │ [VCC] [GND] [DO]  │  │                                 │  │ [VCC] [GND] [DO]  │  │
+ └──┴───┬─────┬────┬────┴──┘                                 └──┴───┬─────┬────┬────┴──┘
+        │     │    │                                                │     │    │
+        │     │    └───────────────────────┐   ┌────────────────────┼─────┼────┘
+        │     │                            │   │                    │     │
+        │     │    ┌───────────────────────┴───┴────────────────┐   │     │
+        │     │    │            ESP32 DEVKIT V1                 │   │     │
+        │     │    │               (38-PIN)                     │   │     │
+        │     │    │                                            │   │     │
+        │     │    │  [3V3] ──────── Power (3.3V) Rail ─────────┼───┤     │
+        │     │    │  [GND] ──────── Common Ground Rail ────────┼───┼─────┤
+        │     │    │                                            │   │     │
+        │     └────┤► [GND]                        [GPIO 22] ◄──┼───┼─────┼───────┐ (SCL)
+        └──────────┤► [3V3]                        [GPIO 21] ◄──┼───┼─────┼───┐   │ (SDA)
+                   │  [GPIO 34] ◄── (Left DO)      [GPIO 25] ───┼───┼─┐   │   │   │ (Tone)
+                   │  [GPIO 35] ◄── (Right DO)     [GND]        │   │ │   │   │   │
+                   │                                            │   │ │   │   │   │
+                   └────────────────────────────────────────────┘   │ │   │   │   │
+                                                                    │ │   │   │   │
+             ┌──────────────────────────────────────────────────────┘ │   │   │   │
+             │                                                        │   │   │   │
+             ▼                                                        ▼   ▼   ▼   ▼
+ ┌─────────────────────────┐                                ┌─────────────────────────┐
+ │   BUZZER MODULE         │                                │   SSD1306 OLED (128x64) │
+ │   (Active or Passive)   │                                │   (I2C Display)         │
+ │  ┌───────────────────┐  │                                │  ┌───────────────────┐  │
+ │  │ [GND] [VCC] [SIG] │  │                                │  │[GND] [VCC] [SCL] [SDA]
+ └──┴───┬─────┬─────▲───┴──┘                                └──┴──┬─────┬─────▲─────▲─┘
+        │     │     │ (GPIO 25 PWM)                               │     │     │     │
+        │     └─────┼──────────────── 3.3V Rail ──────────────────┼─────┘     │     │
+        └───────────┼──────────────── Ground Rail ────────────────┘           │     │
+                    │                                                         │     │
+                    └─────────────────────────────────────────────────────────┼─────┘
+                                                                              │
+                                       (ESP32 GPIO 22 Clock) ─────────────────┘
 ```
 
 ---
 
-## 2. Concurrency and Dual-Core Execution Model
+## 2. Complete Pin Assignment Matrix
 
-The ESP32 dual-core Xtensa LX6 architecture is leveraged to physically separate high-priority, jitter-free real-time sensing from network-induced latency and non-deterministic I/O.
+The following table details every active and reserved connection on the ESP32 board:
+
+| ESP32 Pin | Function | Peripheral | Pin on Peripheral | Voltage Logic | Details / Notes |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **GPIO 34** | Digital Input | Left IR Module | DO (Digital Out) | 3.3V Logic | Input-only pin (GPI). Active-LOW detection signal. |
+| **GPIO 35** | Digital Input | Right IR Module | DO (Digital Out) | 3.3V Logic | Input-only pin (GPI). Active-LOW detection signal. |
+| **GPIO 25** | PWM Output | Cockpit Buzzer | SIG / I/O | 3.3V PWM | Driven by LEDC Channel 0 (8-bit resolution, multi-tone). |
+| **GPIO 21** | I2C Data | SSD1306 OLED | SDA | 3.3V Logic | ESP32 default hardware I2C data line. 400 kHz fast mode. |
+| **GPIO 22** | I2C Clock | SSD1306 OLED | SCL | 3.3V Logic | ESP32 default hardware I2C clock line. 400 kHz fast mode. |
+| **GPIO 26** | Digital Output | Ultrasonic (Optional) | TRIG | 3.3V Logic | Reserved for optional HC-SR04 front sensor. |
+| **GPIO 36** | Digital Input | Ultrasonic (Optional) | ECHO | 3.3V (Divided) | Reserved for optional HC-SR04 front sensor (requires divider). |
+| **3V3** | Power Output | All modules | VCC | 3.3V DC | Regulated onboard 3.3V supply rail. |
+| **GND** | Ground | All modules | GND | 0V Reference | Common reference ground rail across all modules. |
+
+---
+
+## 3. End-to-End Functional Architecture
+
+```mermaid
+graph TD
+    subgraph SENSING ["1. SENSING LAYER (100 Hz Non-Blocking)"]
+        IR_L["Left IR Sensor (GPIO 34)\nActive-LOW Optical Comparator"]
+        IR_R["Right IR Sensor (GPIO 35)\nActive-LOW Optical Comparator"]
+    end
+
+    subgraph PROCESSING ["2. SIGNAL CONDITIONING & LOGIC"]
+        DEB_L["Left Glitch Filter (15 ms)"]
+        DEB_R["Right Glitch Filter (15 ms)"]
+        FSM{"4-State FSM Engine\n(Evaluates Safety State)"}
+    end
+
+    subgraph OUTPUTS ["3. COCKPIT ACTUATION LAYER"]
+        BUZZ["Buzzer Controller (GPIO 25)\n- Left: 2200 Hz Tone\n- Right: 2900 Hz Tone\n- Dual: 3400/2400 Hz Warble\n- Clear: 0 Hz Silence"]
+        OLED["SSD1306 HUD (GPIO 21/22)\n- 16 FPS Top-Down Truck View\n- Dynamic Radar Wave Arcs\n- Backward Flowing Road Markers\n- Fail-Safe 50ms Timeout"]
+        UART["Serial Diagnostics\n- 115200 Baud Diagnostic Stream\n- Frame, Raw Readings & State"]
+    end
+
+    IR_L --> DEB_L
+    IR_R --> DEB_R
+    DEB_L --> FSM
+    DEB_R --> FSM
+
+    FSM -->|SAFE_CLEAR| BUZZ
+    FSM -->|WARN_LEFT| BUZZ
+    FSM -->|WARN_RIGHT| BUZZ
+    FSM -->|WARN_BOTH| BUZZ
+
+    FSM --> OLED
+    FSM --> UART
+```
+
+---
+
+## 4. Software Subsystems and Execution Flow
+
+The firmware is structured into four cooperative, non-blocking subsystems that run sequentially on each pass of the main `loop()`:
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant C0 as Core 0: sensorTask (20 ms Cadence)
-    participant SS as Shared SystemState (portMUX Lock)
-    participant C1 as Core 1: Arduino loop() & AsyncTCP
-    participant WS as Connected WebSocket Client (Phone)
+    participant Main as main.cpp
+    participant Sensors as SensorManager
+    participant FSM as State Engine
+    participant Buzzer as BuzzerController
+    participant OLED as DisplayController
 
-    loop Every 20 ms (50 Hz Cadence)
-        C0->>C0: Sample GPIO 32, 33 (Radar) & 34, 35 (IR)
-        C0->>C0: Update Radar Hold Timers (3000 ms window)
-        C0->>C0: Evaluate Fusion: occupied = IR || hold_active
-        C0->>C0: Evaluate FSM Transitions
-        C0->>C0: Drive Red/Green LEDs & Alert Buzzer
-        C0->>SS: Acquire spinlock, update snapshot, release spinlock
-    end
-
-    loop Every ~100 ms or on State Change
-        C1->>SS: Acquire spinlock, copy snapshot, release spinlock
-        C1->>C1: Refresh SSD1306 OLED via I2C (Wire)
-        alt State Changed OR Heartbeat Timer Expired (200 ms)
-            C1->>WS: Broadcast compact JSON packet via /ws
-        end
+    loop Every 10ms (100 Hz Loop)
+        Main->>Sensors: update(now)
+        Sensors-->>Main: SensorData (debounced flags)
+        Main->>FSM: evaluateState(data)
+        FSM-->>Main: BsmState (SAFE / LEFT / RIGHT / BOTH)
+        Main->>Buzzer: update(state, now)
+        Note over Buzzer: Updates LEDC PWM tone or silence
+        Main->>OLED: update(data, state, now)
+        Note over OLED: Refreshes graphics every 60ms (~16 FPS)
     end
 ```
 
-### 2.1 Core Allocation
-- **Core 0 — Deterministic Real-Time Sensing (`sensorTask`):**
-  - Priority: `tskIDLE_PRIORITY + 3` (high priority).
-  - Pinned to Core 0 using `xTaskCreatePinnedToCore`.
-  - Timing: Fixed 20 ms cadence (50 Hz) regulated by `vTaskDelayUntil()`.
-  - Responsibilities: Digital pin reads, software radar hold-timer evaluation, sensor fusion logic, FSM state updates, and direct GPIO output control (LEDs, active buzzer).
-- **Core 1 — Communication and Display (`loopTask`):**
-  - Priority: Default Arduino `setup()` and `loop()`.
-  - Responsibilities: Wi-Fi SoftAP stack, ESPAsyncWebServer request routing, AsyncTCP WebSocket broadcast handling, client connection life-cycle, and I2C OLED display refresh (10–20 Hz).
-
-### 2.2 Cross-Core Thread Safety
-Access to the shared `SystemState` structure must never block Core 0.
-- Synchronization Mechanism: FreeRTOS `portMUX_TYPE` spinlock (`taskENTER_CRITICAL()` / `taskEXIT_CRITICAL()`) or C++11 `std::atomic` fields.
-- Zero Mutexes: Heavy FreeRTOS mutexes (`xSemaphoreCreateMutex`) that can cause priority inversion or task suspension are strictly forbidden on the 20 ms sensing path.
-
----
-
-## 3. Data Flow Architecture
-
-The data pipeline progresses from raw physical sensor events to fused semantic states, then branches into cockpit alert outputs and remote telemetry.
-
-```mermaid
-flowchart LR
-    subgraph Raw_Sensors["Raw Hardware Readings"]
-        RL[Radar L]
-        RR[Radar R]
-        IL[IR L]
-        IR[IR R]
-    end
-
-    subgraph Temporal_Filter["Temporal Processing"]
-        TH_L["Left Radar Hold Window\n(now - t_last < 3000ms)"]
-        TH_R["Right Radar Hold Window\n(now - t_last < 3000ms)"]
-        POL_L["IR Polarity Normalizer\n(digitalRead == LOW)"]
-        POL_R["IR Polarity Normalizer\n(digitalRead == LOW)"]
-    end
-
-    subgraph Fusion_Engine["Boolean Fusion"]
-        F_L["Left Occupied = IR_L || Hold_L"]
-        F_R["Right Occupied = IR_R || Hold_R"]
-    end
-
-    subgraph State_Resolution["State Resolution"]
-        FSM{"Evaluate FSM\n(Both, Left, Right, Safe)"}
-    end
-
-    subgraph Actuation["Local Actuation"]
-        LED["LED Indicators\n(Red L/R, Green Safe)"]
-        BUZZ["Active Buzzer Cadence"]
-        OLED["OLED Graphics Engine"]
-    end
-
-    subgraph Remote["Wireless Telemetry"]
-        JSON["JSON Serializer"]
-        WS["WebSocket Broadcast (/ws)"]
-        UI["Phone Dashboard DOM"]
-    end
-
-    RL --> TH_L
-    RR --> TH_R
-    IL --> POL_L
-    IR --> POL_R
-
-    TH_L --> F_L
-    POL_L --> F_L
-    TH_R --> F_R
-    POL_R --> F_R
-
-    F_L --> FSM
-    F_R --> FSM
-
-    FSM --> LED
-    FSM --> BUZZ
-    FSM --> OLED
-    FSM --> JSON
-    JSON --> WS
-    WS --> UI
-```
-
----
-
-## 4. Finite State Machine (FSM) Architecture
-
-The system operates a deterministic 4-state Mealy/Moore hybrid state machine. The current state is resolved every 20 ms based on fused occupancy flags.
-
-```mermaid
-stateDiagram-v2
-    [*] --> STATE_SAFE : System Boot & Init
-
-    STATE_SAFE --> STATE_LEFT_WARNING : left_occupied == true && right_occupied == false
-    STATE_SAFE --> STATE_RIGHT_WARNING : right_occupied == true && left_occupied == false
-    STATE_SAFE --> STATE_BOTH_WARNING : left_occupied == true && right_occupied == true
-
-    STATE_LEFT_WARNING --> STATE_SAFE : left_occupied == false
-    STATE_LEFT_WARNING --> STATE_BOTH_WARNING : right_occupied == true
-
-    STATE_RIGHT_WARNING --> STATE_SAFE : right_occupied == false
-    STATE_RIGHT_WARNING --> STATE_BOTH_WARNING : left_occupied == true
-
-    STATE_BOTH_WARNING --> STATE_LEFT_WARNING : right_occupied == false && left_occupied == true
-    STATE_BOTH_WARNING --> STATE_RIGHT_WARNING : left_occupied == false && right_occupied == true
-    STATE_BOTH_WARNING --> STATE_SAFE : left_occupied == false && right_occupied == false
-
-    state STATE_SAFE {
-        Green_LED_ON : Green LED ON (GPIO 27)
-        Red_LEDs_OFF : Red LEDs OFF
-        Buzzer_SILENT : Buzzer Silent
-        OLED_CLEAR : OLED shows 'SYSTEM CLEAR'
-    }
-
-    state STATE_LEFT_WARNING {
-        Left_Red_ACTIVE : Left Red LED ON/Blink (GPIO 25)
-        Safe_LED_OFF_L : Green LED OFF
-        Buzzer_PULSE_L : Buzzer Pulsed Alert
-        OLED_HAZARD_L : OLED Left Hazard Arrow
-    }
-
-    state STATE_RIGHT_WARNING {
-        Right_Red_ACTIVE : Right Red LED ON/Blink (GPIO 26)
-        Safe_LED_OFF_R : Green LED OFF
-        Buzzer_PULSE_R : Buzzer Pulsed Alert
-        OLED_HAZARD_R : OLED Right Hazard Arrow
-    }
-
-    state STATE_BOTH_WARNING {
-        Both_Red_ACTIVE : Both Red LEDs ON (GPIO 25 & 26)
-        Safe_LED_OFF_B : Green LED OFF
-        Buzzer_RAPID_B : Rapid High-Priority Buzzer Alert
-        OLED_HAZARD_B : OLED Dual Hazard Warning
-    }
-```
-
----
-
-## 5. Subsystem Component Architecture
-
-### 5.1 Sensing Subsystem
-- **Module Path:** `src/sensors/` (`radar.h`, `radar.cpp`, `ir.h`, `ir.cpp`).
-- **Interfaces:** `void sensors_init()`, `void sensors_read(RawSensorData &out)`.
-- **Hardware Decoupling:** Hardware pins and polarities are injected from `config.h`. No hardcoded GPIO accesses exist inside processing routines.
-
-### 5.2 Fusion & State Machine Subsystem
-- **Module Path:** `src/logic/` (`fusion.h`, `fusion.cpp`, `state_machine.h`, `state_machine.cpp`).
-- **Interfaces:** `SystemState fusion_update(const RawSensorData &raw, uint32_t now)`.
-- **Pure Logic:** Contains no direct hardware GPIO or display calls, enabling 100% unit-testability on host platforms or Unity simulators.
-
-### 5.3 Local Actuation Subsystem
-- **Module Path:** `src/outputs/` (`indicators.h`, `indicators.cpp`, `buzzer.h`, `buzzer.cpp`, `display.h`, `display.cpp`).
-- **LED/Buzzer Driver:** Evaluates current state and manages non-blocking blinking/pulsing cadences using elapsed time checks.
-- **OLED Display Driver:** Formats hazard icons, radar/IR activity badges, and system uptime into SSD1306 buffer over 400 kHz I2C.
-
-### 5.4 Wireless & Web Subsystem
-- **Module Path:** `src/network/` (`wifi_manager.h`, `wifi_manager.cpp`, `web_server.h`, `web_server.cpp`, `dashboard_html.h`).
-- **SoftAP Configuration:** IP `192.168.4.1`, Subnet `255.255.255.0`, SSID `BlindSpottr-AP`, WPA2 Passphrase configured in `config.h`.
-- **Embedded PROGMEM Dashboard:** Complete HTML5/CSS3/JavaScript web application stored as an escaped `const char DASHBOARD_HTML[] PROGMEM` string inside `dashboard_html.h`. Zero external filesystem partitions (SPIFFS/LittleFS) required.
-- **WebSocket Protocol:** Endpoint `/ws`. Dispatches telemetry as JSON strings:
-  ```json
-  {"state":1,"left":true,"right":false,"radarL":true,"radarR":false,"irL":false,"irR":false,"uptime":12450}
-  ```
+### Subsystem Breakdown:
+1. **SensorManager (`src/sensors.h / .cpp`)**:
+   - Reads GPIO 34 and GPIO 35.
+   - Applies an asynchronous 15 ms debounce window so mechanical vibrations or quick flickers do not disrupt warning states.
+2. **State Engine (`src/main.cpp`)**:
+   - Pure deterministic resolution. Evaluates whether both sides, one side, or no sides are obstructed.
+3. **BuzzerController (`src/buzzer.h / .cpp`)**:
+   - Manages an ESP32 LEDC timer channel on GPIO 25.
+   - Generates clean square-wave acoustic frequencies with zero CPU overhead once started.
+   - Immediately cuts power when returning to `SAFE_CLEAR` state.
+4. **DisplayController (`src/display.h / .cpp`)**:
+   - Renders animated top-down pixel art on the SSD1306 monochrome screen at approximately 16 frames per second.
+   - Operates in 400 kHz fast I2C mode. Employs hardware bus timeout handling to guarantee the main loop never halts if the screen is disconnected.
