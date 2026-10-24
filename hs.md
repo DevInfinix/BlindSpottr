@@ -31,7 +31,7 @@ This file provides rapid context for working on BlindSpottr.
 2. hs.md                -> This file (quick state and handoff summary)
 3. docs/flow.md         -> Authoritative project specification and layman guide
 4. docs/architecture.md -> 2D component wiring illustration and subsystem data flow
-5. docs/design.md       -> State machine semantics and acoustic pitch breakdown
+5. docs/design.md       -> Industrial design and AI visual prompt library
 6. TODO.md              -> Phased roadmap and task prerequisites
 7. PROGRESS.md          -> Verified milestones, commit audit log, and hardware facts
 8. Inspect codebase     -> 'git status', check active branch, run 'pio run'

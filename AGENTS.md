@@ -55,7 +55,7 @@ If contradictions arise across project documents, resolve them in this priority 
 1. **`AGENTS.md`**: Master rules for agent execution, safety, and Git/GitHub procedures.
 2. **`docs/flow.md`**: Authoritative system specification and hardware truth (merged master guide).
 3. **`docs/architecture.md`**: Subsystem relationships, 2D wiring diagram, and data flow.
-4. **`docs/design.md`**: System design trade-offs, state semantics, and HUD specifications.
+4. **`docs/design.md`**: Industrial design and prompt library for photorealistic project visualization.
 5. **`TODO.md`**: Phased task roadmap, dependencies, and acceptance criteria.
 6. **`PROGRESS.md`**: Current verified implementation state, audit logs, and blocker tracking.
 7. **`hs.md`**: Rapid orientation and handoff summary.
