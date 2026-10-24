@@ -1,73 +1,55 @@
-# hs.md — BlindSpottr Rapid Context & Handoff Summary
+# hs.md: Quick Orientation and Handoff Summary
 
-> **QUICK START:** This file is the primary quick-orientation document for any AI coding agent starting a session on **BlindSpottr**. For full engineering rules, refer to `AGENTS.md`. For authoritative hardware specifications, refer to `docs/flow.md`.
-
----
-
-## 1. Project Identity & Objective
-
-- **Project:** BlindSpottr
-- **System Type:** ESP32-based intelligent automotive blind-spot monitoring prototype for a model vehicle.
-- **Target Microcontroller:** ESP32 38-pin DevKit V1 (`esp32doit-devkit-v1`).
-- **Firmware Environment:** PlatformIO with Arduino Framework in VS Code.
-- **Core Concept:** Fuses short-range moving-object detection (**2× RCWL-0516 microwave radar**) and stationary-object presence (**2× IR sensors**) to eliminate blind-spot false negatives when vehicles stop. Outputs warnings locally (left/right red LEDs, green safe LED, active buzzer, 0.96" I2C OLED) and over an onboard Wi-Fi SoftAP to an interactive mobile phone dashboard via WebSockets.
+This file provides rapid context for working on BlindSpottr.
 
 ---
 
-## 2. Mandatory Reading Order
+## 1. Quick Facts
 
-When beginning a new session or resuming development, read documents in this exact order:
+- **Project**: BlindSpottr (Toy-Truck Blind-Spot Monitoring System).
+- **Target Microcontroller**: ESP32 DevKit V1 38-Pin (`esp32doit-devkit-v1`).
+- **Framework**: Arduino on PlatformIO (`~/.platformio/penv/bin/pio` or `/opt/homebrew/bin/pio`).
+- **Core Files**:
+  - `include/config.h`: Central hardware pinouts, timing intervals, and buzzer frequencies.
+  - `src/sensors.h / .cpp`: Non-blocking IR sensor acquisition and 15 ms glitch filter.
+  - `src/display.h / .cpp`: SSD1306 128x64 animated graphic HUD (truck view, radar arcs, road markers).
+  - `src/buzzer.h / .cpp`: Hardware LEDC PWM driver on GPIO 25 with directional tone variation.
+  - `src/main.cpp`: Main coordination loop, deterministic FSM, and serial telemetry.
+- **Physical Pin Mapping**:
+  - Left IR Digital Out: **GPIO 34** (input-only, active-LOW).
+  - Right IR Digital Out: **GPIO 35** (input-only, active-LOW).
+  - Buzzer Output: **GPIO 25** (LEDC PWM Channel 0).
+  - OLED SDA: **GPIO 21** (I2C data, 3.3V).
+  - OLED SCL: **GPIO 22** (I2C clock, 400 kHz fast mode).
+
+---
+
+## 2. Reading Order for New Sessions
 
 ```text
-1. AGENTS.md                → Master engineering rules, safety, and Git conventions
-2. hs.md                    → This file (high-level state and handoff)
-3. docs/flow.md             → Authoritative technical specification & hardware pinouts
-4. docs/architecture.md     → Subsystems, concurrency, and Mermaid data flows
-5. docs/design.md           → State transitions, UI layouts, and design trade-offs
-6. docs/implementation.md   → Module interfaces, headers, and FreeRTOS task models
-7. TODO.md                  → Phased implementation roadmap & task acceptance criteria
-8. PROGRESS.md              → Current verified state, audit logs, and known issues
+1. AGENTS.md            -> Engineering rules, non-blocking guidelines, Git workflow
+2. hs.md                -> This file (quick state and handoff summary)
+3. docs/flow.md         -> Authoritative project specification and layman guide
+4. docs/architecture.md -> 2D component wiring illustration and subsystem data flow
+5. docs/design.md       -> State machine semantics and acoustic pitch breakdown
+6. TODO.md              -> Phased roadmap and task prerequisites
+7. PROGRESS.md          -> Verified milestones, commit audit log, and hardware facts
+8. Inspect codebase     -> 'git status', check active branch, run 'pio run'
 ```
 
 ---
 
-## 3. Authoritative Hardware Pinout Summary
+## 3. Working Commands
 
-Centralized pinout from `docs/flow.md`:
-
-| Signal Name | ESP32 GPIO | Direction | Function / Hardware Notes |
-| :--- | :--- | :--- | :--- |
-| `PIN_RADAR_L` | **GPIO 32** | Input | Left RCWL-0516 radar Doppler pulse (Active-HIGH) |
-| `PIN_RADAR_R` | **GPIO 33** | Input | Right RCWL-0516 radar Doppler pulse (Active-HIGH) |
-| `PIN_IR_L` | **GPIO 34** | Input | Left IR obstacle sensor (Input-only GPI, active-LOW) |
-| `PIN_IR_R` | **GPIO 35** | Input | Right IR obstacle sensor (Input-only GPI, active-LOW) |
-| `PIN_LED_L` | **GPIO 25** | Output | Left red alert LED (Active-HIGH) |
-| `PIN_LED_R` | **GPIO 26** | Output | Right red alert LED (Active-HIGH) |
-| `PIN_LED_SAFE`| **GPIO 27** | Output | Green safe LED (Active-HIGH, ON during `STATE_SAFE`) |
-| `PIN_BUZZER` | **GPIO 14** | Output | Active buzzer (Active-HIGH alert cadences) |
-| `PIN_I2C_SDA` | **GPIO 21** | I/O | SSD1306 OLED I2C Data (Address `0x3C`, 3.3V) |
-| `PIN_I2C_SCL` | **GPIO 22** | Output | SSD1306 OLED I2C Clock (Address `0x3C`, 3.3V) |
-
-*Safety Reminder:* GPIO 34 & 35 are input-only pins without internal pull-ups; strapping pins (GPIO 0, 2, 12, 15) must remain unused.
-
----
-
-## 4. Key Architectural Constants & Rules
-
-1. **Sensor Fusion Formula:**
-   $$\text{side\_occupied} = \text{IR\_detected} \lor \text{radar\_hold\_active}$$
-2. **Radar Hold Duration:** `3000 ms` (`RADAR_HOLD_MS`). Radar triggers latch for 3 seconds to bridge vehicle movement to stationary stopping.
-3. **Sensing Cadence:** `20 ms` (50 Hz) on FreeRTOS Core 0.
-4. **Deterministic States:** Exactly 4 states: `STATE_SAFE (0)`, `STATE_LEFT_WARNING (1)`, `STATE_RIGHT_WARNING (2)`, `STATE_BOTH_WARNING (3)`.
-5. **Non-Blocking Rule:** `delay()` is strictly forbidden in runtime code. Use `millis()` software timers and FreeRTOS yields.
-6. **Web Dashboard Delivery:** Embedded in flash memory via **PROGMEM HTML/CSS/JS** (`src/network/dashboard_html.h`). No SPIFFS/LittleFS image uploads required.
-7. **Telemetry Tick:** WebSocket `/ws` updates pushed immediately on state change, plus a 200 ms periodic telemetry packet.
-
----
-
-## 5. Current Development State
-
-- **Current Phase:** Phase 0 (Initialization & Engineering Reconnaissance) complete.
-- **Firmware Status:** **NO firmware implementation has been performed.** Source directory contains only the initial template (`src/main.cpp`).
-- **Repository Status:** Documentation architecture fully established. Git repository and GitHub integration ready for Phase 1.
-- **Next Recommended Action:** **Phase 1, Task 1.1** — Configure `platformio.ini` dependencies (`lib_deps`), verify compile pipeline with `pio run`, and establish `include/config.h` pinout definitions.
+- Compile firmware:
+  ```bash
+  pio run
+  ```
+- Upload to ESP32:
+  ```bash
+  pio run --target upload
+  ```
+- Monitor serial console:
+  ```bash
+  pio device monitor --baud 115200
+  ```
