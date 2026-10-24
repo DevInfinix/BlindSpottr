@@ -50,6 +50,7 @@ Recent commits on integration branch `dev` and release branch `main`:
 - [x] **Milestone 5: Dynamic 16 FPS Graphic OLED HUD**: 128x64 top-down truck model, side radar pulses, forward scanner beams, flowing road markers.
 - [x] **Milestone 6: Perspective Calibration**: Inverted wave and chevron animations to match the user's overhead line of sight.
 - [x] **Milestone 7: Documentation Unification**: Merged implementation specifications into `docs/flow.md`, rebuilt `docs/architecture.md` with 2D visual layouts, and humanized project prose.
+- [x] **Milestone 8: Industrial Design & Visual Prompt Library**: Converted `docs/design.md` into an AI visual reference library and removed transient `docs/live.md`.
 
 ---
 

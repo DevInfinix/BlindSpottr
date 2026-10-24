@@ -45,10 +45,11 @@ This roadmap tracks active phases, prerequisites, and tasks across the developme
 - [x] Calibrate visual animation and chevron mapping to match overhead viewing perspective.
 - [x] Verify that left obstacle triggers left radar waves and right obstacle triggers right radar waves.
 
-### Phase 6: Documentation & Schematics (COMPLETED)
+### Phase 6: Documentation, Schematics & Prompt Library (COMPLETED)
 - [x] Merge `docs/implementation.md` into `docs/flow.md` as the unified layman-friendly reference.
 - [x] Create 2D visual layout and pinout matrix in `docs/architecture.md`.
 - [x] Humanize `README.md` and clean up project documentation.
+- [x] Transform `docs/design.md` into a prompt library for AI image generation and remove `docs/live.md`.
 
 ### Phase 7: Ultrasonic Front Collision Sensing (PLANNED)
 - [ ] Connect HC-SR04 ultrasonic sensor (TRIG: GPIO 26, ECHO: GPIO 36 via resistor divider).
