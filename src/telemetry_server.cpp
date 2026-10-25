@@ -1,5 +1,6 @@
 #include "telemetry_server.h"
 #include "dashboard_html.h"
+#include <ESPmDNS.h>
 
 static const char* stateToString(BsmState state) {
     switch (state) {
@@ -18,22 +19,33 @@ TelemetryServer::TelemetryServer()
       _packetCounter(0) {}
 
 void TelemetryServer::begin() {
-    // 1. Initialize Wi-Fi SoftAP
-    WiFi.mode(WIFI_AP);
-    WiFi.softAP(WIFI_SSID, WIFI_PASSWORD);
-    delay(100);
+    // 1. Dual Wi-Fi Mode: AP + Station
+    // This allows the ESP32 to connect to your phone's hotspot while simultaneously broadcasting its own AP
+    WiFi.mode(WIFI_AP_STA);
+    WiFi.softAP(WIFI_AP_SSID, WIFI_AP_PASSWORD);
 
-    IPAddress ip = WiFi.softAPIP();
-    Serial.print(F("[WIFI] Access Point started: "));
-    Serial.println(WIFI_SSID);
-    Serial.print(F("[WIFI] IP Address: "));
-    Serial.println(ip);
+    // Try connecting to phone hotspot if configured
+    if (strlen(HOTSPOT_SSID) > 0 && strcmp(HOTSPOT_SSID, "iPhone") != 0) {
+        WiFi.begin(HOTSPOT_SSID, HOTSPOT_PASSWORD);
+        Serial.printf("[WIFI] Connecting to Phone Hotspot '%s'...\n", HOTSPOT_SSID);
+    }
+
+    IPAddress apIP = WiFi.softAPIP();
+    Serial.print(F("[WIFI] Standalone AP active: "));
+    Serial.println(WIFI_AP_SSID);
+    Serial.print(F("[WIFI] AP Web URL: http://"));
+    Serial.println(apIP);
+
+    // Start mDNS responder so you can just type 'http://blindspottr.local'
+    if (MDNS.begin("blindspottr")) {
+        Serial.println(F("[mDNS] Responder started: http://blindspottr.local"));
+    }
 
     // 2. Attach WebSocket event handlers
     _ws.onEvent([](AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
         if (type == WS_EVT_CONNECT) {
             Serial.printf("[WS] Client #%u connected from %s\n", client->id(), client->remoteIP().toString().c_str());
-            client->text("{\"event\":\"connected\",\"system\":\"BlindSpottr\",\"version\":\"2.5\"}");
+            client->text("{\"event\":\"connected\",\"system\":\"BlindSpottr\",\"version\":\"2.6\"}");
         } else if (type == WS_EVT_DISCONNECT) {
             Serial.printf("[WS] Client #%u disconnected\n", client->id());
         }
@@ -41,9 +53,9 @@ void TelemetryServer::begin() {
 
     _server.addHandler(&_ws);
 
-    // Root route: Serve the 3D Tesla-style HUD directly to any phone or laptop browser
+    // Root route: Serves the 100% self-contained Tesla-style HUD (zero external CDN dependencies)
     _server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
-        request->send_P(200, "text/html", INDEX_HTML);
+        request->send(200, "text/html", INDEX_HTML);
     });
 
     // Health-check HTTP route
@@ -52,7 +64,7 @@ void TelemetryServer::begin() {
     });
 
     _server.begin();
-    Serial.println(F("[WS] Asynchronous WebSocket server running on ws://192.168.4.1/ws"));
+    Serial.println(F("[WS] Asynchronous WebSocket server active on /ws"));
 }
 
 uint32_t TelemetryServer::getClientCount() const {
@@ -61,6 +73,14 @@ uint32_t TelemetryServer::getClientCount() const {
 
 void TelemetryServer::update(const SensorData& data, BsmState state, uint32_t now) {
     _ws.cleanupClients();
+
+    // Log Wi-Fi Station IP once connected to hotspot
+    static bool staReported = false;
+    if (WiFi.status() == WL_CONNECTED && !staReported) {
+        staReported = true;
+        Serial.print(F("[WIFI] CONNECTED TO PHONE HOTSPOT! IP Address: http://"));
+        Serial.println(WiFi.localIP());
+    }
 
     // Stream telemetry to active clients at 20 Hz
     if (now - _lastBroadcastMs < WS_BROADCAST_INTERVAL_MS) {

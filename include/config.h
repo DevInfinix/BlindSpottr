@@ -64,11 +64,6 @@ constexpr float US_MAX_PLAUSIBLE_CM       = 300.0f;
 // 3. BUZZER FREQUENCY VARIATIONS & PATTERNS
 // =============================================================================
 
-// Distinct acoustic pitch for each warning state:
-// - Left Hazard: 2200 Hz tone (Mid-high tone, rhythmic pulsed cadence)
-// - Right Hazard: 2900 Hz tone (Sharper high tone, alternating cadence)
-// - Front Hazard: 1800 Hz urgent pulsing beep
-// - Dual / Multi Hazard: Rapid dual-chirp switching between 2400 Hz and 3400 Hz
 constexpr uint32_t BUZZER_FREQ_FRONT_HZ   = 1800;
 constexpr uint32_t BUZZER_FREQ_LEFT_HZ    = 2200;
 constexpr uint32_t BUZZER_FREQ_RIGHT_HZ   = 2900;
@@ -80,7 +75,7 @@ constexpr uint32_t BUZZER_SINGLE_ON_MS    = 100;
 constexpr uint32_t BUZZER_SINGLE_OFF_MS   = 120;
 constexpr uint32_t BUZZER_FRONT_ON_MS     = 60;
 constexpr uint32_t BUZZER_FRONT_OFF_MS    = 60;
-constexpr uint32_t BUZZER_DUAL_CHIRP_MS   = 50;  // Ultra-rapid alert burst
+constexpr uint32_t BUZZER_DUAL_CHIRP_MS   = 50;
 
 // =============================================================================
 // 4. DISPLAY REFRESH & SERIAL DIAGNOSTICS
@@ -91,10 +86,16 @@ constexpr uint32_t SERIAL_BAUD              = 115200;
 constexpr uint32_t DIAGNOSTICS_INTERVAL_MS  = 250;
 
 // =============================================================================
-// 5. WI-FI SOFTAP & ASYNCHRONOUS WEBSOCKET TELEMETRY
+// 5. WI-FI DUAL-MODE (HOTSPOT CLIENT + FALLBACK ACCESS POINT)
 // =============================================================================
 
-constexpr const char* WIFI_SSID             = "BlindSpottr-AP";
-constexpr const char* WIFI_PASSWORD         = "blindspottr123";
-constexpr uint16_t HTTP_PORT                = 80;
+// If you want the ESP32 to connect to your phone's personal hotspot or home Wi-Fi:
+// Enter your phone hotspot SSID & password here:
+constexpr const char* HOTSPOT_SSID         = "iPhone";       // Change to your phone's hotspot name
+constexpr const char* HOTSPOT_PASSWORD     = "12345678";     // Change to your hotspot password
+
+// Fallback Standalone AP (active simultaneously or when hotspot is unavailable)
+constexpr const char* WIFI_AP_SSID         = "BlindSpottr-AP";
+constexpr const char* WIFI_AP_PASSWORD     = "blindspottr123";
+constexpr uint16_t HTTP_PORT               = 80;
 constexpr uint32_t WS_BROADCAST_INTERVAL_MS = 50;    // 20 Hz high-speed live stream

@@ -1,18 +1,18 @@
 #pragma once
 #include <Arduino.h>
 
-// Self-contained, production-grade 3D Tesla-style HUD served directly from ESP32 flash memory
+// High-performance 2.5D/3D Tesla Perception HUD (Pure Canvas + Matrix Math - Zero CDN dependencies)
 const char INDEX_HTML[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>BlindSpottr Tesla 3D HUD</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>BlindSpottr Tesla HUD</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body, html { width: 100%; height: 100%; overflow: hidden; background: #07090e; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-    #canvas-container { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1; }
+    #canvas { width: 100%; height: 100%; display: block; position: absolute; top: 0; left: 0; z-index: 1; }
     #overlay-hud { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; padding: 16px; }
     .hud-top { display: flex; justify-content: space-between; align-items: center; }
     .status-badge { background: rgba(18, 22, 31, 0.85); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 20px; padding: 7px 14px; color: #fff; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
@@ -29,18 +29,17 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
     .telemetry-card { background: rgba(18, 22, 31, 0.85); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 10px 14px; color: #a0aec0; font-size: 11px; }
     .telemetry-card b { color: #fff; font-size: 13px; }
   </style>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
-  <div id="canvas-container"></div>
+  <canvas id="canvas"></canvas>
   <div id="overlay-hud">
     <div class="hud-top">
       <div class="status-badge">
         <div id="status-dot" class="status-dot connecting"></div>
-        <span id="state-text">CONNECTING TO TRUCK...</span>
+        <span id="state-text">CONNECTING...</span>
       </div>
       <div class="status-badge">
-        <span id="rate-text">ws://192.168.4.1/ws</span>
+        <span id="ip-text">BlindSpottr Live</span>
       </div>
     </div>
     <div class="hud-center">
@@ -53,156 +52,17 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
   </div>
 
   <script>
-    // 1. Three.js Tesla-Style 3D Scene Initialization
-    const container = document.getElementById('canvas-container');
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x07090e);
-    scene.fog = new THREE.FogExp2(0x07090e, 0.025);
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
 
-    const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(0, 7.5, 12);
-    camera.lookAt(0, 1.2, -2);
-
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.1;
-    container.appendChild(renderer.domElement);
-
-    // Dynamic Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
-    scene.add(ambientLight);
-
-    const dirLight = new THREE.DirectionalLight(0xa5c9ff, 1.2);
-    dirLight.position.set(8, 16, 10);
-    scene.add(dirLight);
-
-    const hemiLight = new THREE.HemisphereLight(0x3b82f6, 0x050505, 0.6);
-    scene.add(hemiLight);
-
-    // 2. Procedural Moving Road & Grid
-    const roadGroup = new THREE.Group();
-    scene.add(roadGroup);
-
-    const groundGeo = new THREE.PlaneGeometry(80, 200);
-    const groundMat = new THREE.MeshStandardMaterial({ color: 0x090c14, roughness: 0.9, metalness: 0.1 });
-    const ground = new THREE.Mesh(groundGeo, groundMat);
-    ground.rotation.x = -Math.PI / 2;
-    ground.position.y = -0.05;
-    roadGroup.add(ground);
-
-    const gridHelper = new THREE.GridHelper(100, 50, 0x1f293d, 0x111827);
-    gridHelper.position.y = 0;
-    scene.add(gridHelper);
-
-    const laneMarkers = [];
-    const laneGeo = new THREE.PlaneGeometry(0.35, 3.5);
-    const laneMat = new THREE.MeshBasicMaterial({ color: 0x3b82f6, transparent: true, opacity: 0.7 });
-    for (let i = 0; i < 20; i++) {
-      const leftMarker = new THREE.Mesh(laneGeo, laneMat);
-      leftMarker.rotation.x = -Math.PI / 2;
-      leftMarker.position.set(-2.8, 0.01, (i * 8) - 60);
-      roadGroup.add(leftMarker);
-      laneMarkers.push(leftMarker);
-
-      const rightMarker = new THREE.Mesh(laneGeo, laneMat);
-      rightMarker.rotation.x = -Math.PI / 2;
-      rightMarker.position.set(2.8, 0.01, (i * 8) - 60);
-      roadGroup.add(rightMarker);
-      laneMarkers.push(rightMarker);
+    function resize() {
+      canvas.width = window.innerWidth * window.devicePixelRatio;
+      canvas.height = window.innerHeight * window.devicePixelRatio;
+      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
     }
+    window.addEventListener('resize', resize);
+    resize();
 
-    // 3. Authored 3D Scale Truck Model
-    const truckGroup = new THREE.Group();
-    scene.add(truckGroup);
-
-    const cabMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.35, metalness: 0.6 });
-    const cabGeo = new THREE.BoxGeometry(2.2, 1.6, 2.8);
-    const cab = new THREE.Mesh(cabGeo, cabMat);
-    cab.position.set(0, 1.2, 0.8);
-    truckGroup.add(cab);
-
-    const glassMat = new THREE.MeshPhysicalMaterial({ color: 0x0284c7, transmission: 0.8, opacity: 0.9, transparent: true, roughness: 0.1 });
-    const windGeo = new THREE.BoxGeometry(2.0, 0.7, 0.05);
-    const wind = new THREE.Mesh(windGeo, glassMat);
-    wind.position.set(0, 1.5, -0.62);
-    wind.rotation.x = 0.25;
-    truckGroup.add(wind);
-
-    const bedMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.7, metalness: 0.4 });
-    const bedGeo = new THREE.BoxGeometry(2.1, 1.1, 3.2);
-    const bed = new THREE.Mesh(bedGeo, bedMat);
-    bed.position.set(0, 1.05, 3.4);
-    truckGroup.add(bed);
-
-    const wheelMat = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, roughness: 0.8 });
-    const wheelGeo = new THREE.CylinderGeometry(0.45, 0.45, 0.4, 24);
-    const wheelPositions = [
-      [-1.15, 0.45, 0.8], [1.15, 0.45, 0.8],
-      [-1.15, 0.45, 3.2], [1.15, 0.45, 3.2],
-      [-1.15, 0.45, 4.2], [1.15, 0.45, 4.2]
-    ];
-    wheelPositions.forEach(pos => {
-      const wheel = new THREE.Mesh(wheelGeo, wheelMat);
-      wheel.rotation.z = Math.PI / 2;
-      wheel.position.set(...pos);
-      truckGroup.add(wheel);
-    });
-
-    const lightGlowMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
-    const headGeo = new THREE.BoxGeometry(0.4, 0.2, 0.1);
-    const headL = new THREE.Mesh(headGeo, lightGlowMat);
-    headL.position.set(-0.8, 0.9, -0.6);
-    truckGroup.add(headL);
-    const headR = new THREE.Mesh(headGeo, lightGlowMat);
-    headR.position.set(0.8, 0.9, -0.6);
-    truckGroup.add(headR);
-
-    // 4. Volumetric Blind-Spot Radar Wave Shaders
-    function createWaveMesh(isLeft) {
-      const waveGroup = new THREE.Group();
-      for (let i = 0; i < 3; i++) {
-        const ringGeo = new THREE.RingGeometry(0.8 + i * 0.9, 1.0 + i * 0.9, 32, 1, Math.PI * 0.2, Math.PI * 0.6);
-        const ringMat = new THREE.MeshBasicMaterial({
-          color: 0xef4444,
-          transparent: true,
-          opacity: 0.0,
-          side: THREE.DoubleSide
-        });
-        const ring = new THREE.Mesh(ringGeo, ringMat);
-        ring.rotation.x = -Math.PI / 2;
-        ring.position.y = 0.4;
-        if (!isLeft) ring.rotation.z = Math.PI;
-        waveGroup.add(ring);
-      }
-      waveGroup.position.set(isLeft ? -1.5 : 1.5, 0.2, 1.2);
-      scene.add(waveGroup);
-      return waveGroup;
-    }
-
-    const leftRadarWaves = createWaveMesh(true);
-    const rightRadarWaves = createWaveMesh(false);
-
-    // 5. Dynamic 3D Obstacle Proxy (Front Vehicle)
-    const obstacleGeo = new THREE.BoxGeometry(2.0, 1.4, 3.2);
-    const obstacleMat = new THREE.MeshStandardMaterial({
-      color: 0xd97706,
-      roughness: 0.4,
-      metalness: 0.5,
-      transparent: true,
-      opacity: 0.0
-    });
-    const obstacleVehicle = new THREE.Mesh(obstacleGeo, obstacleMat);
-    obstacleVehicle.position.set(0, 1.1, -12);
-    scene.add(obstacleVehicle);
-
-    const wireGeo = new THREE.EdgesGeometry(obstacleGeo);
-    const wireMat = new THREE.LineBasicMaterial({ color: 0xf59e0b, linewidth: 2, transparent: true, opacity: 0.0 });
-    const wireframeBox = new THREE.LineSegments(wireGeo, wireMat);
-    obstacleVehicle.add(wireframeBox);
-
-    // 6. Live Telemetry Processing & Native WebSocket Client
     let currentData = {
       left: false,
       right: false,
@@ -213,7 +73,6 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
 
     function updateTelemetryUI(data) {
       currentData = data;
-
       document.getElementById('left-text').innerText = data.left ? "HAZARD" : "CLEAR";
       document.getElementById('left-text').style.color = data.left ? "#ff1744" : "#00e676";
       document.getElementById('right-text').innerText = data.right ? "HAZARD" : "CLEAR";
@@ -228,7 +87,7 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
         if (data.front_cm < 20) {
           distCard.className = "distance-badge danger";
           dot.className = "status-dot danger";
-          stateText.innerText = "COLLISION WARNING";
+          stateText.innerText = "COLLISION ALERT";
         } else if (data.front_cm < 40) {
           distCard.className = "distance-badge warning";
           dot.className = "status-dot warning";
@@ -243,22 +102,22 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
         distCard.className = "distance-badge";
         if (data.left || data.right) {
           dot.className = "status-dot danger";
-          stateText.innerText = data.left && data.right ? "DUAL BLIND SPOT ALERT" : (data.left ? "LEFT BLIND SPOT" : "RIGHT BLIND SPOT");
+          stateText.innerText = data.left && data.right ? "DUAL SIDE ALERT" : (data.left ? "LEFT BLIND SPOT" : "RIGHT BLIND SPOT");
         } else {
           dot.className = "status-dot";
-          stateText.innerText = "SYSTEM ACTIVE";
+          stateText.innerText = "LIVE PERCEPTION";
         }
       }
     }
 
-    // Connect to ESP32 WebSocket
     function connectWS() {
-      const wsUrl = `ws://${window.location.hostname || "192.168.4.1"}/ws`;
-      const ws = new WebSocket(wsUrl);
+      const wsHost = window.location.host || "192.168.4.1";
+      const ws = new WebSocket(`ws://${wsHost}/ws`);
 
       ws.onopen = () => {
         document.getElementById('status-dot').className = "status-dot";
         document.getElementById('state-text').innerText = "LIVE PERCEPTION";
+        document.getElementById('ip-text').innerText = wsHost;
       };
 
       ws.onmessage = (event) => {
@@ -276,79 +135,165 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
         setTimeout(connectWS, 2000);
       };
 
-      ws.onerror = () => {
-        ws.close();
-      };
+      ws.onerror = () => { ws.close(); };
     }
     connectWS();
 
-    // 7. Render Animation Loop
-    let clock = new THREE.Clock();
-    function animate() {
-      requestAnimationFrame(animate);
-      const delta = clock.getDelta();
-      const elapsed = clock.getElapsedTime();
+    // Perspective Projection helper
+    let roadOffset = 0;
+    let targetObstacleZ = 200;
+    let curObstacleZ = 200;
 
-      // Animate road stripes backward
-      laneMarkers.forEach(m => {
-        m.position.z += 18 * delta;
-        if (m.position.z > 25) {
-          m.position.z = -55;
-        }
-      });
+    function render(time) {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      ctx.clearRect(0, 0, w, h);
 
-      // Chassis oscillation
-      truckGroup.position.y = Math.sin(elapsed * 4) * 0.02;
-      truckGroup.rotation.z = Math.sin(elapsed * 2) * 0.005;
+      const vpX = w / 2;
+      const vpY = h * 0.38;
 
-      // Animate Left Radar Waves
-      leftRadarWaves.children.forEach((mesh, idx) => {
-        if (currentData.left) {
-          mesh.material.opacity = 0.3 + 0.4 * Math.sin(elapsed * 8 + idx * 1.5);
-          mesh.material.color.setHex(0xff1744);
-        } else {
-          mesh.material.opacity = Math.max(0, mesh.material.opacity - delta * 4);
-        }
-      });
+      // Draw Grid / Ground
+      ctx.fillStyle = '#07090e';
+      ctx.fillRect(0, 0, w, h);
 
-      // Animate Right Radar Waves
-      rightRadarWaves.children.forEach((mesh, idx) => {
-        if (currentData.right) {
-          mesh.material.opacity = 0.3 + 0.4 * Math.sin(elapsed * 8 + idx * 1.5);
-          mesh.material.color.setHex(0xff1744);
-        } else {
-          mesh.material.opacity = Math.max(0, mesh.material.opacity - delta * 4);
-        }
-      });
+      // Perspective Road Horizon
+      const grad = ctx.createLinearGradient(0, vpY, 0, h);
+      grad.addColorStop(0, '#0f172a');
+      grad.addColorStop(1, '#020617');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.moveTo(vpX - 8, vpY);
+      ctx.lineTo(vpX + 8, vpY);
+      ctx.lineTo(w * 0.9, h);
+      ctx.lineTo(w * 0.1, h);
+      ctx.closePath();
+      ctx.fill();
 
-      // Animate Dynamic Front 3D Obstacle Proxy
-      if (currentData.front_valid && currentData.front_cm > 0 && currentData.front_cm <= 150) {
-        const targetZ = -2.8 - (currentData.front_cm / 6.0);
-        obstacleVehicle.position.z += (targetZ - obstacleVehicle.position.z) * 0.15;
-        obstacleVehicle.material.opacity = THREE.MathUtils.lerp(obstacleVehicle.material.opacity, 0.85, 0.1);
-        wireMat.opacity = THREE.MathUtils.lerp(wireMat.opacity, 1.0, 0.1);
+      // Road Lane Markings
+      roadOffset = (roadOffset + 4) % 40;
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.5)';
+      ctx.lineWidth = 3;
 
-        if (currentData.front_cm <= 20) {
-          obstacleMat.color.setHex(0xef4444);
-          wireMat.color.setHex(0xff1744);
-        } else {
-          obstacleMat.color.setHex(0xd97706);
-          wireMat.color.setHex(0xf59e0b);
-        }
-      } else {
-        obstacleVehicle.material.opacity = Math.max(0, obstacleVehicle.material.opacity - delta * 3);
-        wireMat.opacity = Math.max(0, wireMat.opacity - delta * 3);
+      for (let z = 10; z < 400; z += 40) {
+        const pz = z - roadOffset;
+        if (pz <= 5) continue;
+        const scale = 220 / (pz + 100);
+        const y = vpY + (h - vpY) * (scale * 0.7);
+        const lw = 40 * scale;
+
+        ctx.beginPath();
+        ctx.moveTo(vpX - lw, y);
+        ctx.lineTo(vpX - lw, y + 15 * scale);
+        ctx.moveTo(vpX + lw, y);
+        ctx.lineTo(vpX + lw, y + 15 * scale);
+        ctx.stroke();
       }
 
-      renderer.render(scene, camera);
-    }
-    animate();
+      // 3D Front Obstacle Proxy
+      if (currentData.front_valid && currentData.front_cm > 0 && currentData.front_cm <= 120) {
+        targetObstacleZ = 40 + currentData.front_cm * 2.2;
+      } else {
+        targetObstacleZ = 300;
+      }
+      curObstacleZ += (targetObstacleZ - curObstacleZ) * 0.15;
 
-    window.addEventListener('resize', () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-    });
+      if (curObstacleZ < 260) {
+        const obsScale = 220 / (curObstacleZ + 100);
+        const obsY = vpY + (h - vpY) * (obsScale * 0.7);
+        const obsW = 80 * obsScale;
+        const obsH = 45 * obsScale;
+
+        ctx.save();
+        ctx.translate(vpX, obsY);
+        const isDanger = (currentData.front_cm > 0 && currentData.front_cm <= 20);
+        ctx.fillStyle = isDanger ? 'rgba(239, 68, 68, 0.85)' : 'rgba(245, 158, 11, 0.85)';
+        ctx.strokeStyle = isDanger ? '#ff1744' : '#f59e0b';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.roundRect(-obsW/2, -obsH, obsW, obsH, 6 * obsScale);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#fff';
+        ctx.font = `bold ${Math.max(10, 14 * obsScale)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillText(`${Math.round(currentData.front_cm)} cm`, 0, -obsH / 2 + 4 * obsScale);
+        ctx.restore();
+      }
+
+      // Draw Hero 3D Truck (Foreground)
+      const truckX = vpX;
+      const truckY = h * 0.75;
+      const tw = 84;
+      const th = 130;
+
+      ctx.save();
+      ctx.translate(truckX, truckY);
+
+      // Radar Waves on Left
+      if (currentData.left) {
+        const pulse = (Math.sin(time * 0.01) + 1) * 0.5;
+        ctx.strokeStyle = `rgba(255, 23, 68, ${0.4 + 0.5 * pulse})`;
+        ctx.lineWidth = 3;
+        for (let i = 1; i <= 3; i++) {
+          ctx.beginPath();
+          ctx.arc(-tw/2 - 10, -th * 0.2, 18 * i + pulse * 8, Math.PI * 0.6, Math.PI * 1.4);
+          ctx.stroke();
+        }
+      }
+
+      // Radar Waves on Right
+      if (currentData.right) {
+        const pulse = (Math.sin(time * 0.01) + 1) * 0.5;
+        ctx.strokeStyle = `rgba(255, 23, 68, ${0.4 + 0.5 * pulse})`;
+        ctx.lineWidth = 3;
+        for (let i = 1; i <= 3; i++) {
+          ctx.beginPath();
+          ctx.arc(tw/2 + 10, -th * 0.2, 18 * i + pulse * 8, -Math.PI * 0.4, Math.PI * 0.4);
+          ctx.stroke();
+        }
+      }
+
+      // Truck Shadow
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.beginPath();
+      ctx.ellipse(0, th * 0.4, tw * 0.65, 12, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Truck Body
+      ctx.fillStyle = '#1e293b';
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.roundRect(-tw/2, -th/2, tw, th, 12);
+      ctx.fill();
+      ctx.stroke();
+
+      // Windshield
+      ctx.fillStyle = '#0284c7';
+      ctx.beginPath();
+      ctx.roundRect(-tw * 0.38, -th * 0.35, tw * 0.76, 32, 6);
+      ctx.fill();
+
+      // Cargo Bed
+      ctx.fillStyle = '#0f172a';
+      ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+      ctx.beginPath();
+      ctx.roundRect(-tw * 0.42, 0, tw * 0.84, th * 0.42, 6);
+      ctx.fill();
+      ctx.stroke();
+
+      // Headlights
+      ctx.fillStyle = '#38bdf8';
+      ctx.shadowColor = '#38bdf8';
+      ctx.shadowBlur = 12;
+      ctx.fillRect(-tw/2 + 6, -th/2 - 4, 16, 6);
+      ctx.fillRect(tw/2 - 22, -th/2 - 4, 16, 6);
+
+      ctx.restore();
+      requestAnimationFrame(render);
+    }
+    requestAnimationFrame(render);
   </script>
 </body>
 </html>
