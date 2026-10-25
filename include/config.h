@@ -91,8 +91,8 @@ constexpr uint32_t DIAGNOSTICS_INTERVAL_MS  = 250;
 
 // If you want the ESP32 to connect to your phone's personal hotspot or home Wi-Fi:
 // Enter your phone hotspot SSID & password here:
-constexpr const char* HOTSPOT_SSID         = "iPhone";       // Change to your phone's hotspot name
-constexpr const char* HOTSPOT_PASSWORD     = "12345678";     // Change to your hotspot password
+constexpr const char* HOTSPOT_SSID         = "Andronix";       // Change to your phone's hotspot name
+constexpr const char* HOTSPOT_PASSWORD     = "samsingh";     // Change to your hotspot password
 
 // Fallback Standalone AP (active simultaneously or when hotspot is unavailable)
 constexpr const char* WIFI_AP_SSID         = "BlindSpottr-AP";

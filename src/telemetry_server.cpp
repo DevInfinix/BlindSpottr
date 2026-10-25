@@ -1,6 +1,13 @@
 #include "telemetry_server.h"
 #include "dashboard_html.h"
 #include <ESPmDNS.h>
+#include <Preferences.h>
+
+static Preferences prefs;
+static char storedSsid[33] = "";
+static char storedPass[65] = "";
+static uint32_t lastStaAttemptMs = 0;
+static bool staConnected = false;
 
 static const char* stateToString(BsmState state) {
     switch (state) {
@@ -19,33 +26,49 @@ TelemetryServer::TelemetryServer()
       _packetCounter(0) {}
 
 void TelemetryServer::begin() {
+    // Load stored Wi-Fi credentials from NVS flash
+    prefs.begin("wifi", false);
+    String s = prefs.getString("ssid", HOTSPOT_SSID);
+    String p = prefs.getString("pass", HOTSPOT_PASSWORD);
+    strncpy(storedSsid, s.c_str(), sizeof(storedSsid) - 1);
+    strncpy(storedPass, p.c_str(), sizeof(storedPass) - 1);
+    prefs.end();
+
     // 1. Dual Wi-Fi Mode: AP + Station
-    // This allows the ESP32 to connect to your phone's hotspot while simultaneously broadcasting its own AP
     WiFi.mode(WIFI_AP_STA);
     WiFi.softAP(WIFI_AP_SSID, WIFI_AP_PASSWORD);
 
-    // Try connecting to phone hotspot if configured
-    if (strlen(HOTSPOT_SSID) > 0 && strcmp(HOTSPOT_SSID, "iPhone") != 0) {
-        WiFi.begin(HOTSPOT_SSID, HOTSPOT_PASSWORD);
-        Serial.printf("[WIFI] Connecting to Phone Hotspot '%s'...\n", HOTSPOT_SSID);
+    IPAddress apIP = WiFi.softAPIP();
+    Serial.println();
+    Serial.println(F("=================================================="));
+    Serial.println(F("   WI-FI NETWORK & WEB ACCESS CREDENTIALS"));
+    Serial.println(F("=================================================="));
+    Serial.print(F(" 1. Standalone AP : "));
+    Serial.println(WIFI_AP_SSID);
+    Serial.print(F("    Password      : "));
+    Serial.println(WIFI_AP_PASSWORD);
+    Serial.print(F("    Browser URL   : http://"));
+    Serial.println(apIP);
+    Serial.println(F(" 2. Auto-Scan STA : Scanning for configured phone hotspot..."));
+    Serial.println(F("=================================================="));
+
+    // Try initial connection to hotspot
+    if (strlen(storedSsid) > 0) {
+        WiFi.begin(storedSsid, storedPass);
     }
 
-    IPAddress apIP = WiFi.softAPIP();
-    Serial.print(F("[WIFI] Standalone AP active: "));
-    Serial.println(WIFI_AP_SSID);
-    Serial.print(F("[WIFI] AP Web URL: http://"));
-    Serial.println(apIP);
-
-    // Start mDNS responder so you can just type 'http://blindspottr.local'
+    // Start mDNS responder so user can type 'http://blindspottr.local'
     if (MDNS.begin("blindspottr")) {
-        Serial.println(F("[mDNS] Responder started: http://blindspottr.local"));
+        MDNS.addService("http", "tcp", 80);
+        MDNS.addService("ws", "tcp", 80);
+        Serial.println(F("[mDNS] http://blindspottr.local registered"));
     }
 
     // 2. Attach WebSocket event handlers
     _ws.onEvent([](AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
         if (type == WS_EVT_CONNECT) {
-            Serial.printf("[WS] Client #%u connected from %s\n", client->id(), client->remoteIP().toString().c_str());
-            client->text("{\"event\":\"connected\",\"system\":\"BlindSpottr\",\"version\":\"2.6\"}");
+            Serial.printf("[WS] Client #%u connected\n", client->id());
+            client->text("{\"event\":\"connected\",\"system\":\"BlindSpottr\",\"version\":\"2.7\"}");
         } else if (type == WS_EVT_DISCONNECT) {
             Serial.printf("[WS] Client #%u disconnected\n", client->id());
         }
@@ -53,9 +76,32 @@ void TelemetryServer::begin() {
 
     _server.addHandler(&_ws);
 
-    // Root route: Serves the 100% self-contained Tesla-style HUD (zero external CDN dependencies)
+    // Root route: Serves the 100% self-contained Tesla-style HUD
     _server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
         request->send(200, "text/html", INDEX_HTML);
+    });
+
+    // Web-based Wi-Fi Manager endpoint to save hotspot credentials without re-flashing!
+    _server.on("/api/wifi", HTTP_POST, [](AsyncWebServerRequest *request) {
+        if (request->hasParam("ssid", true) && request->hasParam("pass", true)) {
+            String newSsid = request->getParam("ssid", true)->value();
+            String newPass = request->getParam("pass", true)->value();
+            prefs.begin("wifi", false);
+            prefs.putString("ssid", newSsid);
+            prefs.putString("pass", newPass);
+            prefs.end();
+
+            strncpy(storedSsid, newSsid.c_str(), sizeof(storedSsid) - 1);
+            strncpy(storedPass, newPass.c_str(), sizeof(storedPass) - 1);
+
+            WiFi.disconnect();
+            WiFi.begin(storedSsid, storedPass);
+
+            request->send(200, "application/json", "{\"status\":\"saved\",\"connecting_to\":\"" + newSsid + "\"}");
+            Serial.printf("[WIFI] New credentials saved! Connecting to '%s'...\n", storedSsid);
+        } else {
+            request->send(400, "application/json", "{\"error\":\"missing ssid or pass\"}");
+        }
     });
 
     // Health-check HTTP route
@@ -64,7 +110,6 @@ void TelemetryServer::begin() {
     });
 
     _server.begin();
-    Serial.println(F("[WS] Asynchronous WebSocket server active on /ws"));
 }
 
 uint32_t TelemetryServer::getClientCount() const {
@@ -74,12 +119,28 @@ uint32_t TelemetryServer::getClientCount() const {
 void TelemetryServer::update(const SensorData& data, BsmState state, uint32_t now) {
     _ws.cleanupClients();
 
-    // Log Wi-Fi Station IP once connected to hotspot
-    static bool staReported = false;
-    if (WiFi.status() == WL_CONNECTED && !staReported) {
-        staReported = true;
-        Serial.print(F("[WIFI] CONNECTED TO PHONE HOTSPOT! IP Address: http://"));
-        Serial.println(WiFi.localIP());
+    // Continuous non-blocking Wi-Fi auto-reconnection loop every 10 seconds
+    if (WiFi.status() == WL_CONNECTED) {
+        if (!staConnected) {
+            staConnected = true;
+            Serial.println();
+            Serial.println(F("**************************************************"));
+            Serial.print(F(" [WIFI] CONNECTED TO PHONE HOTSPOT! IP: http://"));
+            Serial.println(WiFi.localIP());
+            Serial.println(F("**************************************************"));
+        }
+    } else {
+        if (staConnected) {
+            staConnected = false;
+            Serial.println(F("[WIFI] Hotspot disconnected. Auto-retrying in background..."));
+        }
+        if (now - lastStaAttemptMs >= 10000) {
+            lastStaAttemptMs = now;
+            if (strlen(storedSsid) > 0) {
+                WiFi.disconnect();
+                WiFi.begin(storedSsid, storedPass);
+            }
+        }
     }
 
     // Stream telemetry to active clients at 20 Hz

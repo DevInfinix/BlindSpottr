@@ -34,11 +34,11 @@ void SensorManager::begin() {
     _rightDebounced = _data.rightRaw;
     _data.rightObstacle = (_rightDebounced == IR_RIGHT_ACTIVE_LEVEL);
 
-    // 2. Configure Ultrasonic pins if enabled
+    // 2. Configure Ultrasonic pins
     if (ENABLE_ULTRASONIC) {
         pinMode(PIN_US_TRIG, OUTPUT);
         digitalWrite(PIN_US_TRIG, LOW);
-        pinMode(PIN_US_ECHO, INPUT); // GPIO 36 (VP)
+        pinMode(PIN_US_ECHO, INPUT); // GPIO 36 (VP) input-only
     }
 }
 
@@ -87,59 +87,59 @@ void SensorManager::sampleIrSensors(uint32_t now) {
 }
 
 void SensorManager::sampleUltrasonic(uint32_t now) {
-    // Non-blocking trigger and sample schedule every US_SAMPLE_INTERVAL_MS (80ms)
+    // Schedule acoustic pings every 80 ms (12.5 Hz) to allow multi-path echoes to dissipate
     if (now - _lastUsTriggerTime < 80) {
         return;
     }
     _lastUsTriggerTime = now;
     _data.lastUsSampleMs = now;
 
-    // Guard against floating/stuck echo pin
+    // Reject reading if line is already stuck HIGH before pulse
     if (digitalRead(PIN_US_ECHO) == HIGH) {
         _data.frontValid = false;
         _data.frontDistanceCm = -1.0f;
         return;
     }
 
-    // Trigger pulse (10 microseconds)
+    // Send 10µs trigger pulse
     digitalWrite(PIN_US_TRIG, LOW);
     delayMicroseconds(2);
     digitalWrite(PIN_US_TRIG, HIGH);
     delayMicroseconds(10);
     digitalWrite(PIN_US_TRIG, LOW);
 
-    // Bounded measurement: 12ms timeout (~200 cm range max, takes at most 12ms)
-    const unsigned long durationUs = pulseIn(PIN_US_ECHO, HIGH, 12000);
+    // Strict bounded pulse reading (timeout: 10,000 µs = ~170 cm max range)
+    // Takes at most 10 ms even with zero echo returned
+    const unsigned long durationUs = pulseIn(PIN_US_ECHO, HIGH, 10000);
 
-    float measuredCm = -1.0f;
-    bool valid = false;
+    // Filter out:
+    // 1. durationUs == 0 (timeout / no echo)
+    // 2. durationUs < 250 µs (electrical crosstalk / false triggers < 4 cm)
+    // 3. durationUs > 9500 µs (out of range)
+    if (durationUs >= 250 && durationUs <= 9500) {
+        const float rawCm = durationUs * 0.01715f;
+        if (rawCm >= 4.0f && rawCm <= 160.0f) {
+            _recentDistances[_recentDistIndex] = rawCm;
+            _recentDistIndex = (_recentDistIndex + 1) % 3;
 
-    // Accept plausible returns (between 3cm and 200cm)
-    if (durationUs >= 170 && durationUs <= 11600) {
-        float rawCm = durationUs * 0.01715f;
-        if (rawCm >= 3.0f && rawCm <= 200.0f) {
-            measuredCm = rawCm;
-            valid = true;
+            // 3-sample median filter to discard false single-frame jumps
+            float sorted[3];
+            for (int i = 0; i < 3; i++) sorted[i] = _recentDistances[i];
+            if (sorted[0] > sorted[1]) { float t = sorted[0]; sorted[0] = sorted[1]; sorted[1] = t; }
+            if (sorted[1] > sorted[2]) { float t = sorted[1]; sorted[1] = sorted[2]; sorted[2] = t; }
+            if (sorted[0] > sorted[1]) { float t = sorted[0]; sorted[0] = sorted[1]; sorted[1] = t; }
+
+            if (sorted[1] > 0) {
+                _data.frontValid = true;
+                _data.frontDistanceCm = sorted[1];
+                return;
+            }
         }
     }
 
-    if (valid) {
-        _recentDistances[_recentDistIndex] = measuredCm;
-        _recentDistIndex = (_recentDistIndex + 1) % 3;
-
-        // Running 3-sample median filter
-        float sorted[3];
-        for (int i = 0; i < 3; i++) sorted[i] = _recentDistances[i];
-        if (sorted[0] > sorted[1]) { float t = sorted[0]; sorted[0] = sorted[1]; sorted[1] = t; }
-        if (sorted[1] > sorted[2]) { float t = sorted[1]; sorted[1] = sorted[2]; sorted[2] = t; }
-        if (sorted[0] > sorted[1]) { float t = sorted[0]; sorted[0] = sorted[1]; sorted[1] = t; }
-
-        _data.frontValid = true;
-        _data.frontDistanceCm = (sorted[1] > 0) ? sorted[1] : measuredCm;
-    } else {
-        _data.frontValid = false;
-        _data.frontDistanceCm = -1.0f;
-    }
+    // If no clean echo was received, hold or mark invalid cleanly without zero-glitch
+    _data.frontValid = false;
+    _data.frontDistanceCm = -1.0f;
 }
 
 const SensorData& SensorManager::getData() const {
