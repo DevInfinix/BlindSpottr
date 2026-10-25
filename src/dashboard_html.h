@@ -1,76 +1,111 @@
 #pragma once
 #include <Arduino.h>
 
-// High-performance 2.5D/3D Tesla Perception HUD (Pure Canvas + Matrix Math - Zero CDN dependencies)
+// High-performance immersive Tesla-style perception HUD (Canvas rendering + interactive telemetry)
 const char INDEX_HTML[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>BlindSpottr Tesla HUD</title>
+  <title>BlindSpottr FSD Perception HUD</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body, html { width: 100%; height: 100%; overflow: hidden; background: #07090e; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     #canvas { width: 100%; height: 100%; display: block; position: absolute; top: 0; left: 0; z-index: 1; }
-    #overlay-hud { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; padding: 14px; }
+    #overlay-hud { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; padding: 16px; }
+    
+    /* Top Status Bar */
     .hud-top { display: flex; justify-content: space-between; align-items: center; }
-    .status-badge { pointer-events: auto; background: rgba(18, 22, 31, 0.85); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 20px; padding: 7px 14px; color: #fff; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; cursor: pointer; }
-    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #00e676; box-shadow: 0 0 8px #00e676; }
-    .status-dot.danger { background: #ff1744; box-shadow: 0 0 10px #ff1744; }
+    .status-badge { pointer-events: auto; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 24px; padding: 7px 16px; color: #fff; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; cursor: pointer; transition: all 0.2s; }
+    .status-badge:hover { background: rgba(30, 41, 59, 0.95); border-color: rgba(56, 189, 248, 0.4); }
+    .status-dot { width: 9px; height: 9px; border-radius: 50%; background: #00e676; box-shadow: 0 0 10px #00e676; }
+    .status-dot.danger { background: #ff1744; box-shadow: 0 0 12px #ff1744; }
     .status-dot.connecting { background: #38bdf8; box-shadow: 0 0 10px #38bdf8; }
+    
+    /* Speedometer & Gear Indicator (Tesla aesthetic) */
+    .speedo-cluster { pointer-events: auto; background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 16px; padding: 8px 16px; display: flex; align-items: center; gap: 14px; }
+    .gear-pills { display: flex; gap: 6px; font-size: 11px; font-weight: 800; color: #64748b; }
+    .gear-pills span.active { color: #38bdf8; text-shadow: 0 0 8px rgba(56, 189, 248, 0.6); }
+    .speed-display { font-size: 26px; font-weight: 800; color: #fff; line-height: 1; letter-spacing: -0.5px; }
+    .speed-unit { font-size: 10px; color: #94a3b8; font-weight: 600; text-transform: uppercase; margin-left: 2px; }
+
+    /* Center Telemetry & Headway */
     .hud-center { text-align: center; }
-    .distance-badge { display: inline-block; background: rgba(10, 14, 22, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(0, 230, 118, 0.4); border-radius: 12px; padding: 8px 18px; color: #00e676; font-size: 19px; font-weight: 700; letter-spacing: 0.5px; transition: all 0.3s ease; }
+    .distance-badge { display: inline-block; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(16px); border: 1px solid rgba(0, 230, 118, 0.4); border-radius: 14px; padding: 10px 22px; color: #00e676; font-size: 20px; font-weight: 800; letter-spacing: 0.5px; transition: all 0.3s ease; }
     .distance-badge.warning { border-color: rgba(255, 234, 0, 0.6); color: #ffea00; }
     .distance-badge.danger { border-color: rgba(255, 23, 68, 0.8); color: #ff1744; animation: pulseRed 0.8s infinite; }
-    @keyframes pulseRed { 0% { box-shadow: 0 0 0 0 rgba(255, 23, 68, 0.4); } 70% { box-shadow: 0 0 0 14px rgba(255, 23, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 23, 68, 0); } }
+    @keyframes pulseRed { 0% { box-shadow: 0 0 0 0 rgba(255, 23, 68, 0.5); } 70% { box-shadow: 0 0 0 16px rgba(255, 23, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 23, 68, 0); } }
+
+    /* Bottom Flank Cards */
     .hud-bottom { display: flex; justify-content: space-between; align-items: flex-end; }
-    .telemetry-card { background: rgba(18, 22, 31, 0.85); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 10px 14px; color: #a0aec0; font-size: 11px; }
-    .telemetry-card b { color: #fff; font-size: 13px; }
+    .telemetry-card { background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 14px; padding: 12px 18px; color: #94a3b8; font-size: 11px; letter-spacing: 0.5px; }
+    .telemetry-card b { color: #fff; font-size: 14px; margin-left: 4px; }
+    .card-left { border-left: 3px solid #38bdf8; }
+    .card-right { border-right: 3px solid #38bdf8; text-align: right; }
 
     /* Interactive Settings Modal */
-    #settings-modal { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; background: rgba(0,0,0,0.8); backdrop-filter: blur(12px); padding: 20px; align-items: center; justify-content: center; }
-    .modal-card { background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 16px; width: 100%; max-width: 380px; padding: 20px; color: #fff; }
-    .modal-card h2 { font-size: 18px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }
-    .modal-card label { display: block; font-size: 12px; color: #94a3b8; margin-top: 12px; margin-bottom: 6px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px; }
-    .modal-card input[type=text], .modal-card input[type=password] { width: 100%; padding: 10px 12px; background: #1e293b; border: 1px solid #334155; border-radius: 8px; color: #fff; font-size: 14px; outline: none; }
+    #settings-modal { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; background: rgba(0,0,0,0.85); backdrop-filter: blur(16px); padding: 20px; align-items: center; justify-content: center; }
+    .modal-card { background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 20px; width: 100%; max-width: 400px; padding: 24px; color: #fff; box-shadow: 0 20px 40px rgba(0,0,0,0.6); }
+    .modal-card h2 { font-size: 18px; font-weight: 700; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+    .modal-card label { display: block; font-size: 11px; color: #94a3b8; margin-top: 14px; margin-bottom: 6px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.8px; }
+    .modal-card input[type=text], .modal-card input[type=password] { width: 100%; padding: 12px 14px; background: #1e293b; border: 1px solid #334155; border-radius: 10px; color: #fff; font-size: 14px; outline: none; }
     .modal-card input[type=range] { width: 100%; accent-color: #38bdf8; margin: 8px 0; }
-    .btn-save { width: 100%; padding: 12px; background: #0284c7; border: none; border-radius: 10px; color: #fff; font-weight: 700; margin-top: 18px; cursor: pointer; }
-    .btn-close { background: none; border: none; color: #94a3b8; font-size: 20px; cursor: pointer; }
+    .btn-save { width: 100%; padding: 14px; background: #0284c7; border: none; border-radius: 12px; color: #fff; font-size: 14px; font-weight: 700; margin-top: 22px; cursor: pointer; transition: all 0.2s; }
+    .btn-save:hover { background: #0369a1; }
+    .btn-close { background: none; border: none; color: #94a3b8; font-size: 22px; cursor: pointer; }
   </style>
 </head>
 <body>
   <canvas id="canvas"></canvas>
 
   <div id="overlay-hud">
+    <!-- Top Header -->
     <div class="hud-top">
       <div class="status-badge" onclick="toggleSettings()">
         <div id="status-dot" class="status-dot connecting"></div>
-        <span id="state-text">CONNECTING...</span>
+        <span id="state-text">INITIALIZING...</span>
       </div>
+
+      <div class="speedo-cluster">
+        <div class="gear-pills">
+          <span class="active">D</span>
+          <span>N</span>
+          <span>R</span>
+          <span>P</span>
+        </div>
+        <div class="speed-display">
+          <span id="speed-val">0</span><span class="speed-unit">cm/s</span>
+        </div>
+      </div>
+
       <div class="status-badge" onclick="toggleSettings()">
         <span>⚙️ Settings</span>
       </div>
     </div>
+
+    <!-- Center Proximity HUD -->
     <div class="hud-center">
       <div id="dist-card" class="distance-badge">HEADWAY: CLEAR</div>
     </div>
+
+    <!-- Bottom Hazard Flanks -->
     <div class="hud-bottom">
-      <div class="telemetry-card">LEFT BLIND SPOT: <b id="left-text">CLEAR</b></div>
-      <div class="telemetry-card">RIGHT BLIND SPOT: <b id="right-text">CLEAR</b></div>
+      <div class="telemetry-card card-left">LEFT BLIND SPOT: <b id="left-text">CLEAR</b></div>
+      <div class="telemetry-card card-right">RIGHT BLIND SPOT: <b id="right-text">CLEAR</b></div>
     </div>
   </div>
 
-  <!-- Settings Modal (Captive Portal & Sensor Tuning) -->
+  <!-- Settings Modal (Hotspot & Sensor Calibration) -->
   <div id="settings-modal">
     <div class="modal-card">
-      <h2><span>⚙️ Vehicle Settings</span><button class="btn-close" onclick="toggleSettings()">✕</button></h2>
+      <h2><span>Vehicle & Network Config</span><button class="btn-close" onclick="toggleSettings()">✕</button></h2>
       
       <label>Headway Warning Threshold: <span id="thresh-val" style="color:#38bdf8; font-weight:bold;">20 cm</span></label>
       <input type="range" id="thresh-slider" min="10" max="60" value="20" oninput="document.getElementById('thresh-val').innerText = this.value + ' cm'">
 
       <label>Connect to Phone Hotspot (SSID):</label>
-      <input type="text" id="cfg-ssid" placeholder="e.g. My-iPhone">
+      <input type="text" id="cfg-ssid" placeholder="Hotspot Name">
 
       <label>Hotspot Password:</label>
       <input type="password" id="cfg-pass" placeholder="Password">
@@ -132,9 +167,12 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
       const distCard = document.getElementById('dist-card');
       const dot = document.getElementById('status-dot');
       const stateText = document.getElementById('state-text');
+      const speedVal = document.getElementById('speed-val');
 
       if (data.front_valid && data.front_cm > 0) {
         distCard.innerText = `HEADWAY: ${Math.round(data.front_cm)} cm`;
+        speedVal.innerText = (data.front_cm < 30) ? "12" : "28";
+
         if (data.front_cm < 20) {
           distCard.className = "distance-badge danger";
           dot.className = "status-dot danger";
@@ -151,6 +189,8 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
       } else {
         distCard.innerText = "HEADWAY: CLEAR";
         distCard.className = "distance-badge";
+        speedVal.innerText = "35";
+
         if (data.left || data.right) {
           dot.className = "status-dot danger";
           stateText.innerText = data.left && data.right ? "DUAL SIDE ALERT" : (data.left ? "LEFT BLIND SPOT" : "RIGHT BLIND SPOT");
@@ -278,26 +318,28 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
       ctx.save();
       ctx.translate(truckX, truckY);
 
-      // Radar Waves on Left (Viewer Right)
+      // Radar Waves on Screen Left (when Left IR triggers):
+      // Drawn on x < 0 (left of truck)
       if (currentData.left) {
         const pulse = (Math.sin(time * 0.01) + 1) * 0.5;
         ctx.strokeStyle = `rgba(255, 23, 68, ${0.4 + 0.5 * pulse})`;
         ctx.lineWidth = 3;
         for (let i = 1; i <= 3; i++) {
           ctx.beginPath();
-          ctx.arc(tw/2 + 10, -th * 0.2, 18 * i + pulse * 8, -Math.PI * 0.4, Math.PI * 0.4);
+          ctx.arc(-tw/2 - 10, -th * 0.2, 18 * i + pulse * 8, Math.PI * 0.6, Math.PI * 1.4);
           ctx.stroke();
         }
       }
 
-      // Radar Waves on Right (Viewer Left)
+      // Radar Waves on Screen Right (when Right IR triggers):
+      // Drawn on x > 0 (right of truck)
       if (currentData.right) {
         const pulse = (Math.sin(time * 0.01) + 1) * 0.5;
         ctx.strokeStyle = `rgba(255, 23, 68, ${0.4 + 0.5 * pulse})`;
         ctx.lineWidth = 3;
         for (let i = 1; i <= 3; i++) {
           ctx.beginPath();
-          ctx.arc(-tw/2 - 10, -th * 0.2, 18 * i + pulse * 8, Math.PI * 0.6, Math.PI * 1.4);
+          ctx.arc(tw/2 + 10, -th * 0.2, 18 * i + pulse * 8, -Math.PI * 0.4, Math.PI * 0.4);
           ctx.stroke();
         }
       }

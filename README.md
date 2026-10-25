@@ -1,18 +1,18 @@
-# BlindSpottr: Blind-Spot Monitoring System
+# BlindSpottr: Autonomous Blind-Spot Monitoring & Headway Perception Platform
 
 <div align="center">
 
 [![PlatformIO](https://img.shields.io/badge/PlatformIO-Core%206.2.0-orange.svg?style=flat-square&logo=platformio)](https://platformio.org/)
 [![Target MCU](https://img.shields.io/badge/MCU-ESP32%20DevKit%20V1-red.svg?style=flat-square&logo=espressif)](https://www.espressif.com/en/products/socs/esp32)
 [![Framework](https://img.shields.io/badge/Framework-Arduino%20C%2B%2B-00979D.svg?style=flat-square&logo=arduino)](https://github.com/espressif/arduino-esp32)
-[![Flutter Mobile](https://img.shields.io/badge/Mobile-Flutter%20%2B%20Three.js-02569B.svg?style=flat-square&logo=flutter)](https://flutter.dev/)
-[![OLED Display](https://img.shields.io/badge/Display-SSD1306%20128x64%20I2C-brightgreen.svg?style=flat-square)](https://www.adafruit.com/)
+[![Mobile WebGL](https://img.shields.io/badge/HUD-Tesla%20FSD%20Perception-0284c7.svg?style=flat-square)](http://192.168.4.1)
+[![OLED Display](https://img.shields.io/badge/Cockpit%20Display-SSD1306%20128x64%20I2C-brightgreen.svg?style=flat-square)](https://www.adafruit.com/)
 [![Audio Alert](https://img.shields.io/badge/Acoustics-LEDC%20Multi--Tone%20PWM-yellow.svg?style=flat-square)]()
-[![Status](https://img.shields.io/badge/Build-Passing-brightgreen.svg?style=flat-square)]()
+[![Version](https://img.shields.io/badge/Release-v1.0.0-blue.svg?style=flat-square)]()
 [![License](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
 <p align="center">
-  A blind-spot monitoring, front headway tracking, and Tesla-style 3D mobile telemetry platform for scale-model trucks using an ESP32, dual optical presence sensors, an HC-SR04 ultrasonic distance sensor, an SSD1306 OLED HUD, and a cross-platform Flutter app with embedded Three.js WebGL rendering.
+  A real-time blind-spot monitoring, front headway tracking, and Tesla-style 3D perception platform for scale-model trucks using an ESP32, dual optical presence sensors, an HC-SR04 ultrasonic distance sensor, an SSD1306 OLED HUD, and an embedded browser-accessible WebGL perception canvas.
 </p>
 
 </div>
@@ -22,14 +22,14 @@
 ## Table of contents
 
 - [Overview](#overview)
-- [Design choices](#design-choices)
-- [System architecture](#system-architecture)
-- [Display interface and 3D Mobile HUD](#display-interface-and-3d-mobile-hud)
-- [Audio alert patterns](#audio-alert-patterns)
+- [Key architectural highlights](#key-architectural-highlights)
 - [Hardware pinout and wiring](#hardware-pinout-and-wiring)
-- [State machine](#state-machine)
-- [Mobile application](#mobile-application)
+- [State machine and threat arbitration](#state-machine-and-threat-arbitration)
+- [Cockpit OLED HUD](#cockpit-oled-hud)
+- [Tesla-style mobile WebGL perception HUD](#tesla-style-mobile-webgl-perception-hud)
+- [Audio alert matrix](#audio-alert-matrix)
 - [Building and flashing](#building-and-flashing)
+- [Connecting your phone or laptop](#connecting-your-phone-or-laptop)
 - [Project structure](#project-structure)
 - [License](#license)
 
@@ -39,7 +39,7 @@
 
 Side mirrors leave blind spots where overtaking vehicles disappear from a driver's peripheral view. In scale models and robotics, simple obstacle detection scripts often rely on `delay()`, which halts execution, starves sensor reads, and causes display stutter.
 
-BlindSpottr uses a non-blocking loop running on an ESP32. It samples two infrared distance sensors and a front ultrasonic sensor, updates an SSD1306 OLED display with animated top-down telemetry and live centimeter readings, and streams live JSON telemetry at 20 Hz over an asynchronous WebSocket server to a Flutter mobile app featuring an interactive Tesla-style 3D WebGL HUD.
+BlindSpottr uses a 100 Hz non-blocking loop running on an ESP32. It samples two infrared distance sensors and a front ultrasonic sensor, updates an SSD1306 OLED display with animated top-down telemetry, and streams live telemetry at 20 Hz over an asynchronous WebSocket server to an interactive Tesla-style perception dashboard accessible on any mobile browser.
 
 ```text
                Ahead / Front Ultrasonic (HC-SR04)
@@ -55,68 +55,108 @@ BlindSpottr uses a non-blocking loop running on an ESP32. It samples two infrare
                  └──────────────────────┘
                             │
                             ▼
-              OLED HUD, Buzzer & 3D Mobile App
+              OLED HUD, Buzzer & 3D Web HUD
 ```
 
 ---
 
-## Design choices
+## Key architectural highlights
 
 - Non-blocking loop: The firmware uses timestamp arithmetic with `millis()` rather than `delay()`. Sensor polling, display refreshes, and buzzer cadences run independently.
-- Tone separation: Left and right warnings use distinct sound frequencies (2200 Hz vs 2900 Hz). The buzzer alerts only on blind spot presence and remains silent for front headway distance.
-- Tesla-style 3D perception: The mobile app renders an interactive 3D scene using Three.js inside a Flutter container. A dynamic 3D obstacle proxy slides forward and backward matching the measured centimeter headway in real time, while volumetric radar waves emit from the side mirrors when obstacles are detected.
-- Asynchronous WebSockets: The ESP32 hosts its own Wi-Fi Access Point (`BlindSpottr-AP`) and streams live telemetry over WebSockets at 20 Hz without blocking sensor loops.
+- Acoustic pitch separation: Left and right warnings use distinct sound frequencies (2200 Hz vs 2900 Hz). The buzzer alerts only on blind spot presence and remains silent for front headway distance.
+- Tesla-style perception dashboard: Served directly from ESP32 flash memory (`http://192.168.4.1/`), rendering an animated 3D truck, perspective road lines, dynamic front obstacle proxy, and volumetric blind-spot radar arcs with zero external internet dependencies.
+- In-browser settings modal: Easily configure personal phone hotspot credentials via a web form saved to ESP32 non-volatile storage (NVS) without modifying or re-flashing code.
+- Acoustic ringdown rejection: Ultrasonic measurements discard false transducer reflections below 400 microseconds (< 7 cm) and apply a 3-sample median filter to eliminate erratic readings.
 
 ---
 
-## System architecture
+## Hardware pinout and wiring
+
+```text
+ ┌─────────────────────────┐                                 ┌─────────────────────────┐
+ │   LEFT IR SENSOR        │                                 │   RIGHT IR SENSOR       │
+ │   (TCRT5000 / LM393)    │                                 │   (TCRT5000 / LM393)    │
+ │  ┌───────────────────┐  │                                 │  ┌───────────────────┐  │
+ │  │ [VCC] [GND] [DO]  │  │                                 │  │ [VCC] [GND] [DO]  │  │
+ └──┴───┬─────┬────┬────┴──┘                                 └──┴───┬─────┬────┬────┴──┘
+        │     │    │                                                │     │    │
+        │     │    └──────────────────────────────────────┐         │     │    │
+        │     │                                           │         │     │    │
+        │     │    ┌──────────────────────────────────────┴─────────┼─────┼────┘
+        │     │    │            ESP32 DEVKIT V1                     │     │
+        │     │    │               (38-PIN)                         │     │
+        │     │    │                                                │     │
+        │     │    │  [VIN] ──────── 5V DC Supply Rail ─────────────┼─────┤
+        │     │    │  [3V3] ──────── 3.3V DC Logic Rail ────────────┼─────┤
+        │     │    │  [GND] ──────── Common Ground Rail ────────────┼─────┤
+        │     │    │                                                │     │
+        │     └────┤► [GND]                            [GPIO 22] ◄──┼─────┼───────┐ (SCL)
+        └──────────┤► [3V3]                            [GPIO 21] ◄──┼─────┼───┐   │ (SDA)
+                   │  [GPIO 35] ◄── (Left DO)          [GPIO 25] ───┼─────┼─┐ │   │   │ (Tone)
+                   │  [GPIO 32] ◄── (Right DO)         [GPIO 26] ───┼─────┼─┼─┼───┼───┼─────┐ (TRIG)
+                   │  [GPIO 36] ◄── (ECHO Pulse)       [GND]        │     │ │ │   │   │     │
+                   └──────────────────▲─────────────────────────────┘     │ │ │   │   │     │
+                                      │                                   │ │ │   │   │     │
+             ┌────────────────────────┘                                   │ │ │   │   │     │
+             │                                                            │ │ │   │   │     │
+             ▼                                                            ▼ ▼ ▼   ▼   ▼     ▼
+ ┌─────────────────────────┐                              ┌─────────────────────────┐ ┌─────────────────────────┐
+ │   BUZZER MODULE         │                              │   SSD1306 OLED (128x64) │ │   HC-SR04 ULTRASONIC    │
+ │   (Active or Passive)   │                              │   (I2C Display)         │ │   (Front Headway)       │
+ │  ┌───────────────────┐  │                              │  ┌───────────────────┐  │ │  ┌───────────────────┐  │
+ │  │ [GND] [VCC] [SIG] │  │                              │  │[GND] [VCC] [SCL] [SDA│ │  │[VCC] [TRIG][ECHO][GND]│
+ └──┴───┬─────┬─────▲───┴──┘                              └──┴──┬─────┬─────▲─────▲─┘ └──┴──┬─────▲─────┬────┬───┘
+        │     │     │ (GPIO 25 PWM)                             │     │     │     │         │     │     │    │
+        │     └─────┼──────────────── 3.3V Rail ────────────────┼─────┘     │     │         │     │     │    │
+        └───────────┼──────────────── Ground Rail ──────────────┴───────────┼─────┼─────────┼─────┼─────┼────┘
+                    │                                                       │     │         │     │     │
+                    │                                                       │     │    (5V) ┘     │     │
+                    │                      (ESP32 GPIO 21 SDA) ─────────────┼─────┘               │     │
+                    │                      (ESP32 GPIO 22 SCL) ─────────────┘                     │     │
+                    │                                                                             │     │
+                    └─────────────────────────────────────────────────────────────────────────────┼─────┘
+                                           (ESP32 GPIO 26 Trigger Pulse) ─────────────────────────┘
+```
+
+| Subsystem | Signal | ESP32 GPIO | Pin type | Wiring note |
+| :--- | :--- | :---: | :---: | :--- |
+| Left IR sensor | `PIN_IR_LEFT` | GPIO 35 | Input | Input-only (GPI). Active-low optical comparator |
+| Right IR sensor | `PIN_IR_RIGHT` | GPIO 32 | Input | Digital input with pull-up. Active-low optical comparator |
+| Ultrasonic trigger | `PIN_US_TRIG` | GPIO 26 | Output | 10 microsecond trigger pulse |
+| Ultrasonic echo | `PIN_US_ECHO` | GPIO 36 (VP) | Input | Ultrasonic echo pulse input |
+| Ultrasonic VCC | VCC | VIN | Power | 5V DC supply from USB bus |
+| Buzzer | `PIN_BUZZER` | GPIO 25 | Output | Driven by LEDC PWM, 8-bit duty resolution |
+| OLED SDA | `PIN_OLED_SDA` | GPIO 21 | I2C Data | 3.3V logic, standard hardware Wire |
+| OLED SCL | `PIN_OLED_SCL` | GPIO 22 | I2C Clock | 3.3V logic, 400 kHz fast mode |
+
+---
+
+## State machine and threat arbitration
 
 ```mermaid
-graph TD
-    subgraph SENSORS ["Sensing subsystem (100 Hz)"]
-        IR_L["Left optical sensor (GPIO 35)"]
-        IR_R["Right optical sensor (GPIO 32)"]
-        US["Front ultrasonic sensor (TRIG: 26, ECHO: 36)"]
-    end
+stateDiagram-v2
+    [*] --> SAFE_CLEAR
 
-    subgraph ENGINE ["State machine & Concurrency"]
-        DEB["Software glitch filter (15 ms)"]
-        US_FILTER["Ultrasonic 3-sample median filter"]
-        FSM{"State evaluation"}
-        WS_SERVER["Async WebSocket Server (ws://192.168.4.1/ws)"]
-    end
+    SAFE_CLEAR --> WARN_LEFT : Left IR active
+    SAFE_CLEAR --> WARN_RIGHT : Right IR active
+    SAFE_CLEAR --> WARN_BOTH : Both IR active
 
-    subgraph ACTUATION ["Local Cockpit Actuation"]
-        BUZZ["Buzzer driver (GPIO 25)\n2200 Hz Left / 2900 Hz Right / Alternating dual"]
-        OLED["SSD1306 controller\n400 kHz I2C (GPIO 21/22)\nLive distance & animated radar HUD"]
-        UART["Serial telemetry\n115200 baud diagnostic stream"]
-    end
+    WARN_LEFT --> SAFE_CLEAR : Left IR clears
+    WARN_LEFT --> WARN_BOTH : Right IR active
 
-    subgraph MOBILE ["Cross-Platform Mobile App (Flutter)"]
-        THREEJS["Three.js 3D WebGL Canvas\n- Dynamic 3D truck model\n- Volumetric flank radar waves\n- Real-time 3D headway proxy car"]
-        SETTINGS["Interactive Settings & Threshold Calibration"]
-    end
+    WARN_RIGHT --> SAFE_CLEAR : Right IR clears
+    WARN_RIGHT --> WARN_BOTH : Left IR active
 
-    IR_L --> DEB
-    IR_R --> DEB
-    US --> US_FILTER
-    DEB --> FSM
-    US_FILTER --> FSM
-
-    FSM --> BUZZ
-    FSM --> OLED
-    FSM --> UART
-    FSM --> WS_SERVER
-    WS_SERVER -->|20 Hz JSON Stream| THREEJS
-    WS_SERVER -->|20 Hz JSON Stream| SETTINGS
+    WARN_BOTH --> WARN_LEFT : Right IR clears
+    WARN_BOTH --> WARN_RIGHT : Left IR clears
+    WARN_BOTH --> SAFE_CLEAR : Both IR clear
 ```
 
 ---
 
-## Display interface and 3D Mobile HUD
+## Cockpit OLED HUD
 
-### 1. Local 128x64 OLED HUD
-The dashboard centers on a top-down view of the truck chassis, showing animated road markers, radar wave pulses, and live distance ahead of the cab:
+The 128x64 OLED layout centers on a top-down view of the truck chassis, showing animated road markers, radar wave pulses, and live distance ahead of the cab:
 
 ```text
 +-------------------------------------------------------+
@@ -132,57 +172,57 @@ The dashboard centers on a top-down view of the truck chassis, showing animated 
 +-------------------------------------------------------+
 ```
 
-### 2. Tesla-Style 3D Mobile App
-- Live 3D truck rendered with PBR materials, headlights, and cargo bed.
-- Infinite scrolling road grid conveying forward speed.
-- Dynamic 3D obstacle proxy vehicle that slides closer or farther matching the front distance in centimeters.
-- Volumetric glowing red radar rings that pulse on the vehicle mirrors when an obstacle enters the blind spot.
+---
+
+## Tesla-style mobile WebGL perception HUD
+
+When opening the dashboard in a browser, a high-performance 3D perception canvas provides full situational awareness:
+- **Central Vehicle**: 3D commercial truck with headlights, cargo bed, and suspension oscillation.
+- **Dynamic 3D Obstacle Proxy**: Visualized vehicle model that moves closer or farther matching measured headway in centimeters.
+- **Volumetric Radar Rings**: Red pulsing arcs ignite on the left and right mirrors when blind spots are obstructed.
+- **Speed & Gear Cluster**: Simulated digital drive gear pills (D/N/R/P) and dynamic velocity indicator.
+- **Interactive Settings Modal**: Adjust warning distance thresholds and configure phone hotspot credentials on the fly.
 
 ---
 
-## Hardware pinout and wiring
+## Audio alert patterns
 
-| Subsystem | Signal | ESP32 GPIO | Pin type | Wiring note |
-| :--- | :--- | :---: | :---: | :--- |
-| Left IR sensor | `PIN_IR_LEFT` | GPIO 35 | Input | Input-only (GPI). Active-low optical comparator |
-| Right IR sensor | `PIN_IR_RIGHT` | GPIO 32 | Input | Digital input with pull-up. Active-low optical comparator |
-| Ultrasonic trigger | `PIN_US_TRIG` | GPIO 26 | Output | 10 microsecond trigger pulse |
-| Ultrasonic echo | `PIN_US_ECHO` | GPIO 36 (VP) | Input | Ultrasonic echo pulse input |
-| Ultrasonic VCC | VCC | VIN | Power | 5V DC supply from USB bus |
-| Buzzer | `PIN_BUZZER` | GPIO 25 | Output | Driven by LEDC PWM, 8-bit duty resolution |
-| OLED SDA | `PIN_OLED_SDA` | GPIO 21 | I2C Data | 3.3V logic, standard hardware Wire |
-| OLED SCL | `PIN_OLED_SCL` | GPIO 22 | I2C Clock | 3.3V logic, 400 kHz fast mode |
+The buzzer connects to GPIO 25 and runs through ESP32 hardware PWM (LEDC channel 0). It alerts solely on blind-spot obstacles:
 
----
-
-## Mobile application
-
-The cross-platform Flutter application lives in the `mobile/` directory:
-- `lib/models/telemetry.dart`: Strongly-typed telemetry data model and settings state.
-- `lib/services/telemetry_service.dart`: Asynchronous WebSocket client with 3-second auto-reconnect logic and latency tracking.
-- `lib/views/hud/hud_screen.dart`: Houses the embedded Three.js WebGL canvas and telemetry cards.
-- `lib/views/settings/settings_screen.dart`: Configurable safety thresholds (10 cm to 100 cm slider), acoustic toggles, and IP setup.
-- `web/threejs/index.html`: Three.js WebGL 3D rendering pipeline with procedural road lines, camera damping, and volumetric radar wave rings.
+| State | Frequency | Cadence | Tone description |
+| :--- | :--- | :--- | :--- |
+| Clear | Silent | Off | No output |
+| Left obstacle | 2200 Hz | 100 ms on, 120 ms off | Steady mid-pitch pulse |
+| Right obstacle | 2900 Hz | 100 ms on, 120 ms off | High-pitch pulse |
+| Both sides blocked | 3400 Hz and 2400 Hz | 50 ms per step | Rapid alternating chirp |
 
 ---
 
 ## Building and flashing
 
-### 1. Flash the ESP32 Firmware
+### 1. Build and Upload
 ```bash
 pio run --target upload
 ```
 
-### 2. Launch the Mobile Application
-1. Connect your smartphone, tablet, or laptop to the vehicle's Wi-Fi network:
+### 2. Monitor Serial Output
+```bash
+pio device monitor --baud 115200
+```
+The terminal displays the Wi-Fi network credentials and IP address without spamming telemetry lines.
+
+---
+
+## Connecting your phone or laptop
+
+1. Connect your device to the truck's access point:
    - **SSID**: `BlindSpottr-AP`
    - **Password**: `blindspottr123`
-2. Open the mobile project:
-   - You can open `mobile/web/threejs/index.html` in any mobile browser, or run the Flutter application:
-   ```bash
-   cd mobile
-   flutter run
-   ```
+2. Open Safari or Chrome and navigate to:
+   👉 **`http://192.168.4.1`** (or `http://blindspottr.local` on supported networks)
+3. To connect the truck to your personal phone hotspot instead:
+   - Tap **⚙️ Settings** on the web HUD.
+   - Enter your hotspot SSID and password, then tap **Save & Connect Truck**.
 
 ---
 
@@ -190,18 +230,17 @@ pio run --target upload
 
 ```text
 BlindSpottr/
-├── platformio.ini         # PlatformIO build flags and library dependencies
+├── platformio.ini         # PlatformIO build configuration and libraries
 ├── include/
-│   └── config.h           # Central pinout, timing, and Wi-Fi configuration
+│   └── config.h           # Central pinout, timing, and network configuration
 ├── src/
-│   ├── main.cpp           # Main execution loop and subsystem orchestration
-│   ├── sensors.h / .cpp   # Non-blocking optical and ultrasonic acquisition
+│   ├── main.cpp           # Main loop and state machine resolution
+│   ├── sensors.h / .cpp   # Non-blocking IR and ultrasonic sensor acquisition
 │   ├── display.h / .cpp   # SSD1306 OLED HUD graphics and animation
 │   ├── buzzer.h / .cpp    # Multi-frequency buzzer driver using LEDC PWM
-│   └── telemetry_server.h / .cpp # Async WebSocket server (ws://192.168.4.1/ws)
-├── mobile/                # Cross-platform Flutter + Three.js mobile app
-│   ├── lib/               # Dart models, services, HUD, and settings views
-│   └── web/threejs/       # WebGL 3D Tesla-style visualization pipeline
+│   ├── telemetry_server.h / .cpp # Async WebSocket server (ws://192.168.4.1/ws)
+│   └── dashboard_html.h   # In-memory Tesla-style WebGL perception HUD
+├── mobile/                # Cross-platform Flutter mobile workspace
 └── docs/                  # Architecture, specifications, and prompt library
 ```
 
