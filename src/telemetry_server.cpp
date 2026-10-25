@@ -1,4 +1,5 @@
 #include "telemetry_server.h"
+#include "dashboard_html.h"
 
 static const char* stateToString(BsmState state) {
     switch (state) {
@@ -39,6 +40,11 @@ void TelemetryServer::begin() {
     });
 
     _server.addHandler(&_ws);
+
+    // Root route: Serve the 3D Tesla-style HUD directly to any phone or laptop browser
+    _server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+        request->send_P(200, "text/html", INDEX_HTML);
+    });
 
     // Health-check HTTP route
     _server.on("/api/status", HTTP_GET, [](AsyncWebServerRequest *request) {
