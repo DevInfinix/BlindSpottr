@@ -30,7 +30,7 @@ bool DisplayController::begin() {
     _display.setCursor(26, 45);
     _display.println(F("SYSTEM READY"));
     _display.display();
-    delay(300);
+    delay(250);
 
     return true;
 }
@@ -79,8 +79,9 @@ void DisplayController::drawBlindSpotWaves(bool leftHazard, bool rightHazard, ui
     const int cx = 64;
     const int cy = 29;
 
-    // LEFT ZONE (Drawn on LEFT side of display: x < cx)
+    // LEFT ZONE (Physically on the LEFT side of the display: x < cx)
     if (leftHazard) {
+        // Multi-tier animated radar pulse expanding to the LEFT
         const int waveStep = (animTick % 4);
         for (int w = 0; w <= waveStep; w++) {
             const int radius = 8 + (w * 5);
@@ -91,23 +92,25 @@ void DisplayController::drawBlindSpotWaves(bool leftHazard, bool rightHazard, ui
         }
         _display.fillTriangle(cx - 16, cy, cx - 22, cy - 6, cx - 22, cy + 6, SSD1306_WHITE);
 
-        // Inverted Left Alert Badge
+        // Inverted Left Alert Badge explicitly labeled "L"
         _display.fillRoundRect(2, 14, 16, 32, 2, SSD1306_WHITE);
         _display.setTextColor(SSD1306_BLACK, SSD1306_WHITE);
         _display.setCursor(6, 20);
         _display.println(F("!"));
-        _display.setCursor(4, 32);
+        _display.setCursor(6, 32);
         _display.println(F("L"));
         _display.setTextColor(SSD1306_WHITE);
     } else {
+        // Clear: animated road line markers flowing backwards (forward motion illusion)
         const int dashOffset = (animTick % 8);
         for (int y = 12 + dashOffset; y < 48; y += 8) {
             _display.drawPixel(cx - 20, y, SSD1306_WHITE);
         }
     }
 
-    // RIGHT ZONE (Drawn on RIGHT side of display: x > cx)
+    // RIGHT ZONE (Physically on the RIGHT side of the display: x > cx)
     if (rightHazard) {
+        // Multi-tier animated radar pulse expanding to the RIGHT
         const int waveStep = (animTick % 4);
         for (int w = 0; w <= waveStep; w++) {
             const int radius = 8 + (w * 5);
@@ -118,15 +121,16 @@ void DisplayController::drawBlindSpotWaves(bool leftHazard, bool rightHazard, ui
         }
         _display.fillTriangle(cx + 16, cy, cx + 22, cy - 6, cx + 22, cy + 6, SSD1306_WHITE);
 
-        // Inverted Right Alert Badge
+        // Inverted Right Alert Badge explicitly labeled "R"
         _display.fillRoundRect(110, 14, 16, 32, 2, SSD1306_WHITE);
         _display.setTextColor(SSD1306_BLACK, SSD1306_WHITE);
         _display.setCursor(115, 20);
         _display.println(F("!"));
-        _display.setCursor(114, 32);
+        _display.setCursor(115, 32);
         _display.println(F("R"));
         _display.setTextColor(SSD1306_WHITE);
     } else {
+        // Clear: animated road line markers flowing backwards
         const int dashOffset = (animTick % 8);
         for (int y = 12 + dashOffset; y < 48; y += 8) {
             _display.drawPixel(cx + 20, y, SSD1306_WHITE);
@@ -166,25 +170,25 @@ void DisplayController::renderDashboard(const SensorData& data, BsmState state, 
     _display.print(F("BLINDSPOTTR"));
     _display.drawLine(0, 9, 127, 9, SSD1306_WHITE);
 
-    // Dynamic warning arrows in header (swapped to match top-down perspective)
-    drawWarningChevrons(data.rightObstacle, data.leftObstacle, _animPhase);
+    // Dynamic warning arrows in header
+    drawWarningChevrons(data.leftObstacle, data.rightObstacle, _animPhase);
 
-    // 2. FORWARD SCANNING RADAR ARCS / DISTANCE TELEMETRY
+    // 2. FORWARD SCANNING RADAR ARCS & DISTANCE HUD
     const int cx = 64;
     const int cy = 29;
 
     if (data.frontValid) {
-        // Render live distance reading above the cab
-        _display.setCursor(cx - 18, 10);
+        // Render live distance readout centered above the truck cab
+        _display.setCursor(cx - 16, 11);
         _display.print((int)data.frontDistanceCm);
         _display.print(F("cm"));
 
         if (data.frontObstacle) {
-            // Urgent warning bar ahead of bumper
-            _display.fillRect(cx - 12, cy - 18, 24, 2, SSD1306_WHITE);
+            // Flashing proximity warning bar right in front of bumper
+            _display.fillRect(cx - 10, cy - 18, 20, 2, SSD1306_WHITE);
         }
     } else {
-        // Continuous sweeping radar beam when clear/searching
+        // Continuous sweeping radar beam emitting ahead of the truck
         const int frontTick = (_animPhase % 5);
         for (int r = 1; r <= 3; r++) {
             const int waveY = (cy - 16) - ((frontTick + r * 4) % 12);
@@ -195,14 +199,15 @@ void DisplayController::renderDashboard(const SensorData& data, BsmState state, 
     }
 
     // 3. CENTER GRAPHIC: TOY TRUCK & BLIND SPOT ZONES
+    // Clean, direct 1:1 mapping: data.leftObstacle draws on left with 'L', data.rightObstacle on right with 'R'
     drawTruckChassis(cx, cy);
-    drawBlindSpotWaves(data.rightObstacle, data.leftObstacle, _animPhase);
+    drawBlindSpotWaves(data.leftObstacle, data.rightObstacle, _animPhase);
 
-    // 4. BOTTOM BANNER
+    // 4. BOTTOM DYNAMIC STATUS BANNER
     _display.drawLine(0, 50, 127, 50, SSD1306_WHITE);
 
     if (state == BsmState::SAFE_CLEAR) {
-        _display.setCursor(26, 54);
+        _display.setCursor(24, 54);
         _display.print(F(">>> ROAD CLEAR <<<"));
     } else if (state == BsmState::WARN_LEFT) {
         _display.fillRect(0, 52, 128, 12, SSD1306_WHITE);
@@ -217,7 +222,7 @@ void DisplayController::renderDashboard(const SensorData& data, BsmState state, 
     } else if (state == BsmState::WARN_FRONT) {
         _display.fillRect(0, 52, 128, 12, SSD1306_WHITE);
         _display.setTextColor(SSD1306_BLACK, SSD1306_WHITE);
-        _display.setCursor(8, 54);
+        _display.setCursor(10, 54);
         _display.print(F("^^ FRONT HAZARD! ^^"));
     } else if (state == BsmState::WARN_BOTH || state == BsmState::WARN_MULTI) {
         const bool invert = ((now / 150) % 2 == 0);

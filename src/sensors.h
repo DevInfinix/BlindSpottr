@@ -39,4 +39,7 @@ private:
     uint32_t _rightDebounceStart;
 
     uint32_t _lastUsTriggerTime;
+    uint8_t _usConsecutiveHits;
+    float _recentDistances[3];
+    uint8_t _recentDistIndex;
 };

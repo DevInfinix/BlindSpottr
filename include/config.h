@@ -51,11 +51,12 @@ constexpr uint8_t IR_LEFT_ACTIVE_LEVEL    = LOW;
 constexpr uint8_t IR_RIGHT_ACTIVE_LEVEL   = LOW;
 
 constexpr uint32_t IR_SAMPLE_INTERVAL_MS  = 10;    // 100 Hz sampling rate
-constexpr uint32_t IR_DEBOUNCE_MS         = 15;    // Glitch filter window
+constexpr uint32_t IR_DEBOUNCE_MS         = 20;    // Solid glitch filter window
 
 // Ultrasonic Measurement Settings
-constexpr float FRONT_HAZARD_THRESHOLD_CM = 20.0f; // Distance threshold for front warning
-constexpr uint32_t US_SAMPLE_INTERVAL_MS  = 80;    // 12.5 Hz ultrasonic ping rate
+// Front obstacle warning triggers only when distance is consistently <= 20 cm
+constexpr float FRONT_HAZARD_THRESHOLD_CM = 20.0f;
+constexpr uint32_t US_SAMPLE_INTERVAL_MS  = 60;    // Sample interval
 constexpr uint32_t US_ECHO_TIMEOUT_US     = 18000; // ~300 cm max range bounded timeout
 constexpr float US_MIN_PLAUSIBLE_CM       = 2.0f;
 constexpr float US_MAX_PLAUSIBLE_CM       = 300.0f;
@@ -86,6 +87,6 @@ constexpr uint32_t BUZZER_DUAL_CHIRP_MS   = 50;  // Ultra-rapid alert burst
 // 4. DISPLAY REFRESH & SERIAL DIAGNOSTICS
 // =============================================================================
 
-constexpr uint32_t OLED_REFRESH_INTERVAL_MS = 60;    // ~16 FPS smooth animation
+constexpr uint32_t OLED_REFRESH_INTERVAL_MS = 50;    // ~20 FPS smooth animation
 constexpr uint32_t SERIAL_BAUD              = 115200;
 constexpr uint32_t DIAGNOSTICS_INTERVAL_MS  = 250;

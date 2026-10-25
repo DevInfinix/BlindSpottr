@@ -16,16 +16,17 @@ static BsmState evaluateState(const SensorData& data) {
     const bool sideBoth = (data.leftObstacle && data.rightObstacle);
     const bool front = (data.frontValid && data.frontObstacle);
 
+    // Front hazard combined with side obstacles creates multi-hazard
     if (front && (data.leftObstacle || data.rightObstacle)) {
         return BsmState::WARN_MULTI;
     } else if (sideBoth) {
         return BsmState::WARN_BOTH;
-    } else if (front) {
-        return BsmState::WARN_FRONT;
     } else if (data.leftObstacle) {
         return BsmState::WARN_LEFT;
     } else if (data.rightObstacle) {
         return BsmState::WARN_RIGHT;
+    } else if (front) {
+        return BsmState::WARN_FRONT;
     }
     return BsmState::SAFE_CLEAR;
 }
@@ -37,14 +38,14 @@ static void printDiagnostics(const SensorData& data, BsmState state, uint32_t no
     lastDiagnosticsMs = now;
 
     Serial.print(F("LEFT (P35)="));
-    Serial.print(data.leftObstacle ? F("OBJECT") : F("CLEAR"));
+    Serial.print(data.leftObstacle ? F("OBJ") : F("CLR"));
     Serial.print(F(" | RIGHT (P32)="));
-    Serial.print(data.rightObstacle ? F("OBJECT") : F("CLEAR"));
+    Serial.print(data.rightObstacle ? F("OBJ") : F("CLR"));
     Serial.print(F(" | FRONT="));
     if (data.frontValid) {
         Serial.print((int)data.frontDistanceCm);
         Serial.print(F("cm"));
-        if (data.frontObstacle) Serial.print(F(" [HAZARD]"));
+        if (data.frontObstacle) Serial.print(F(" [WARN]"));
     } else {
         Serial.print(F("---"));
     }
@@ -66,11 +67,10 @@ void setup() {
 
     Serial.println();
     Serial.println(F("=================================================="));
-    Serial.println(F("  BLINDSPOTTR — TOY TRUCK BSM FIRMWARE v2.2"));
+    Serial.println(F("  BLINDSPOTTR — TOY TRUCK BSM FIRMWARE v2.3"));
     Serial.println(F("=================================================="));
     Serial.println(F("[CONFIG] Left IR = GPIO 35, Right IR = GPIO 32"));
     Serial.println(F("[CONFIG] Ultrasonic TRIG = GPIO 26, ECHO = GPIO 36"));
-    Serial.println(F("[CONFIG] Buzzer = GPIO 25, OLED = GPIO 21(SDA), 22(SCL)"));
 
     // 1. Initialize Buzzer Controller on GPIO 25 with tone generation
     buzzer.begin();
