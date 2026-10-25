@@ -3,18 +3,19 @@
 #include "sensors.h"
 #include "display.h"
 #include "buzzer.h"
+#include "telemetry_server.h"
 
-// Hardware Singletons
+// Hardware & Server Singletons
 static SensorManager sensors;
 static DisplayController display;
 static BuzzerController buzzer;
+static TelemetryServer telemetry;
 
 static BsmState currentState = BsmState::SAFE_CLEAR;
 static uint32_t lastDiagnosticsMs = 0;
 
 /**
- * @brief Deterministic FSM: Evaluates state solely based on Blind-Spot IR inputs.
- *        Ultrasonic distance is telemetry/telemetry-display only, not triggering buzzer.
+ * @brief Evaluates state strictly based on Blind-Spot IR inputs.
  */
 static BsmState evaluateState(const SensorData& data) {
     if (data.leftObstacle && data.rightObstacle) {
@@ -34,16 +35,18 @@ static void printDiagnostics(const SensorData& data, BsmState state, uint32_t no
     lastDiagnosticsMs = now;
 
     Serial.print(F("LEFT (P35)="));
-    Serial.print(data.leftObstacle ? F("OBJECT") : F("CLEAR"));
+    Serial.print(data.leftObstacle ? F("OBJ") : F("CLR"));
     Serial.print(F(" | RIGHT (P32)="));
-    Serial.print(data.rightObstacle ? F("OBJECT") : F("CLEAR"));
+    Serial.print(data.rightObstacle ? F("OBJ") : F("CLR"));
     Serial.print(F(" | US_DIST="));
     if (data.frontValid) {
         Serial.print((int)data.frontDistanceCm);
-        Serial.print(F(" cm"));
+        Serial.print(F("cm"));
     } else {
         Serial.print(F("---"));
     }
+    Serial.print(F(" | WS_CLIENTS="));
+    Serial.print(telemetry.getClientCount());
     Serial.print(F(" | BUZZER="));
 
     switch (state) {
@@ -60,7 +63,7 @@ void setup() {
 
     Serial.println();
     Serial.println(F("=================================================="));
-    Serial.println(F("  BLINDSPOTTR — TOY TRUCK BSM FIRMWARE v2.4"));
+    Serial.println(F("  BLINDSPOTTR — TOY TRUCK BSM FIRMWARE v2.5"));
     Serial.println(F("=================================================="));
 
     // 1. Initialize Buzzer Controller and ensure silence
@@ -73,7 +76,10 @@ void setup() {
     // 3. Initialize OLED Display
     display.begin();
 
-    Serial.println(F("[INFO] System online. Clean IR buzzer alerts & non-blocking US active."));
+    // 4. Initialize Wi-Fi SoftAP & WebSocket Telemetry Server
+    telemetry.begin();
+
+    Serial.println(F("[INFO] System online. Telemetry streaming on ws://192.168.4.1/ws"));
 }
 
 void loop() {
@@ -92,6 +98,9 @@ void loop() {
     // 4. Graphical OLED Dashboard Rendering
     display.update(data, currentState, now);
 
-    // 5. Periodic UART Telemetry
+    // 5. High-speed WebSocket Telemetry Stream (20 Hz)
+    telemetry.update(data, currentState, now);
+
+    // 6. Periodic UART Telemetry
     printDiagnostics(data, currentState, now);
 }

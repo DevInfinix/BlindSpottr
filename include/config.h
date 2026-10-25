@@ -3,7 +3,7 @@
 
 /**
  * @file config.h
- * @brief Centralized Hardware Configuration for BlindSpottr Toy-Truck BSM.
+ * @brief Centralized Hardware & Network Configuration for BlindSpottr Toy-Truck BSM.
  */
 
 // =============================================================================
@@ -54,7 +54,6 @@ constexpr uint32_t IR_SAMPLE_INTERVAL_MS  = 10;    // 100 Hz sampling rate
 constexpr uint32_t IR_DEBOUNCE_MS         = 20;    // Solid glitch filter window
 
 // Ultrasonic Measurement Settings
-// Front obstacle warning triggers only when distance is consistently <= 20 cm
 constexpr float FRONT_HAZARD_THRESHOLD_CM = 20.0f;
 constexpr uint32_t US_SAMPLE_INTERVAL_MS  = 60;    // Sample interval
 constexpr uint32_t US_ECHO_TIMEOUT_US     = 18000; // ~300 cm max range bounded timeout
@@ -90,3 +89,12 @@ constexpr uint32_t BUZZER_DUAL_CHIRP_MS   = 50;  // Ultra-rapid alert burst
 constexpr uint32_t OLED_REFRESH_INTERVAL_MS = 50;    // ~20 FPS smooth animation
 constexpr uint32_t SERIAL_BAUD              = 115200;
 constexpr uint32_t DIAGNOSTICS_INTERVAL_MS  = 250;
+
+// =============================================================================
+// 5. WI-FI SOFTAP & ASYNCHRONOUS WEBSOCKET TELEMETRY
+// =============================================================================
+
+constexpr const char* WIFI_SSID             = "BlindSpottr-AP";
+constexpr const char* WIFI_PASSWORD         = "blindspottr123";
+constexpr uint16_t HTTP_PORT                = 80;
+constexpr uint32_t WS_BROADCAST_INTERVAL_MS = 50;    // 20 Hz high-speed live stream
