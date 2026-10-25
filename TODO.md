@@ -13,8 +13,8 @@ This roadmap tracks active phases, prerequisites, and tasks across the developme
 | **Phase 3** | **Multi-Tone Buzzer Controller** | COMPLETED |
 | **Phase 4** | **Graphic OLED HUD Dashboard** | COMPLETED |
 | **Phase 5** | **Perspective Calibration & Visual Tuning** | COMPLETED |
-| **Phase 6** | **Documentation & Architectural Schematics** | COMPLETED |
-| **Phase 7** | **Ultrasonic Front Collision Sensing** | PLANNED |
+| **Phase 6** | **Ultrasonic Front Headway Sensing (HC-SR04)** | COMPLETED |
+| **Phase 7** | **Documentation, Schematics & Prompt Library** | COMPLETED |
 | **Phase 8** | **Turn-Signal Alert Escalation** | PLANNED |
 
 ---
@@ -32,7 +32,7 @@ This roadmap tracks active phases, prerequisites, and tasks across the developme
 
 ### Phase 3: Multi-Tone Buzzer Controller (COMPLETED)
 - [x] Configure ESP32 hardware LEDC PWM on GPIO 25.
-- [x] Assign distinct pitches: Left = 2200 Hz, Right = 2900 Hz, Dual = 3400/2400 Hz alternating chirp.
+- [x] Assign distinct pitches: Left = 2200 Hz, Right = 2900 Hz, Front = 1800 Hz, Multi = 3400/2400 Hz alternating chirp.
 - [x] Ensure immediate silence upon return to `SAFE_CLEAR`.
 
 ### Phase 4: Graphic OLED HUD Dashboard (COMPLETED)
@@ -45,15 +45,17 @@ This roadmap tracks active phases, prerequisites, and tasks across the developme
 - [x] Calibrate visual animation and chevron mapping to match overhead viewing perspective.
 - [x] Verify that left obstacle triggers left radar waves and right obstacle triggers right radar waves.
 
-### Phase 6: Documentation, Schematics & Prompt Library (COMPLETED)
-- [x] Merge `docs/implementation.md` into `docs/flow.md` as the unified layman-friendly reference.
-- [x] Create 2D visual layout and pinout matrix in `docs/architecture.md`.
-- [x] Humanize `README.md` and clean up project documentation.
-- [x] Transform `docs/design.md` into a prompt library for AI image generation and remove `docs/live.md`.
+### Phase 6: Ultrasonic Front Headway Sensing (COMPLETED)
+- [x] Connect HC-SR04 ultrasonic sensor (TRIG: GPIO 26, ECHO: GPIO 36 via 1kΩ / 2.7kΩ voltage divider).
+- [x] Measure pulse duration with bounded timeout (18 ms / ~300 cm).
+- [x] Display live distance in centimeters above the cab on the OLED HUD.
+- [x] Add urgent 1800 Hz warning beep when headway distance drops below 20 cm.
 
-### Phase 7: Ultrasonic Front Collision Sensing (PLANNED)
-- [ ] Connect HC-SR04 ultrasonic sensor (TRIG: GPIO 26, ECHO: GPIO 36 via resistor divider).
-- [ ] Add forward distance bar and emergency brake warning on OLED HUD.
+### Phase 7: Documentation, Schematics & Prompt Library (COMPLETED)
+- [x] Merge implementation specs into `docs/flow.md` as unified reference.
+- [x] Build 2D visual layout and voltage divider schematics in `docs/architecture.md`.
+- [x] Humanize `README.md` and clean up project documentation.
+- [x] Transform `docs/design.md` into an AI visual reference library.
 
 ### Phase 8: Turn-Signal Alert Escalation (PLANNED)
 - [ ] Wire physical left and right turn-signal switches.

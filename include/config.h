@@ -16,10 +16,12 @@
 constexpr uint8_t PIN_IR_LEFT             = 34; // Physical Left IR input
 constexpr uint8_t PIN_IR_RIGHT            = 35; // Physical Right IR input
 
-// HC-SR04 Front Ultrasonic Sensor (Optional / physically disabled when not plugged)
+// HC-SR04 Front Ultrasonic Distance Sensor
+// TRIG: Direct 3.3V trigger output from ESP32 GPIO 26
+// ECHO: 5V echo pulse stepped down to ~3.3V via 1kΩ / 2.7kΩ voltage divider into GPIO 36 (VP)
 constexpr uint8_t PIN_US_TRIG             = 26;
-constexpr uint8_t PIN_US_ECHO             = 36; // Reassigned away from 34 to avoid conflict
-constexpr bool ENABLE_ULTRASONIC          = false; // Set to true when HC-SR04 is plugged in
+constexpr uint8_t PIN_US_ECHO             = 36; // Pin labeled 'VP' on 38-pin DevKit V1
+constexpr bool ENABLE_ULTRASONIC          = true;
 
 // I2C OLED Display (0.96" SSD1306, 128x64 Monochrome)
 constexpr uint8_t PIN_OLED_SDA            = 21;
@@ -40,15 +42,22 @@ constexpr uint8_t PIN_LED_SAFE            = 23;
 constexpr uint32_t BUZZER_SIDE_ON_MS      = 100;
 
 // =============================================================================
-// 2. SENSOR TIMING & POLARITY
+// 2. SENSOR TIMING, POLARITY & ULTRASONIC THRESHOLDS
 // =============================================================================
 
 // Standard LM393 IR modules output LOW on object detection
 constexpr uint8_t IR_LEFT_ACTIVE_LEVEL    = LOW;
 constexpr uint8_t IR_RIGHT_ACTIVE_LEVEL   = LOW;
 
-constexpr uint32_t IR_SAMPLE_INTERVAL_MS  = 10;   // 100 Hz sampling rate
-constexpr uint32_t IR_DEBOUNCE_MS         = 15;   // Glitch filter window
+constexpr uint32_t IR_SAMPLE_INTERVAL_MS  = 10;    // 100 Hz sampling rate
+constexpr uint32_t IR_DEBOUNCE_MS         = 15;    // Glitch filter window
+
+// Ultrasonic Measurement Settings
+constexpr float FRONT_HAZARD_THRESHOLD_CM = 20.0f; // Distance threshold for front warning
+constexpr uint32_t US_SAMPLE_INTERVAL_MS  = 80;    // 12.5 Hz ultrasonic ping rate
+constexpr uint32_t US_ECHO_TIMEOUT_US     = 18000; // ~300 cm max range bounded timeout
+constexpr float US_MIN_PLAUSIBLE_CM       = 2.0f;
+constexpr float US_MAX_PLAUSIBLE_CM       = 300.0f;
 
 // =============================================================================
 // 3. BUZZER FREQUENCY VARIATIONS & PATTERNS
@@ -57,7 +66,9 @@ constexpr uint32_t IR_DEBOUNCE_MS         = 15;   // Glitch filter window
 // Distinct acoustic pitch for each warning state:
 // - Left Hazard: 2200 Hz tone (Mid-high tone, rhythmic pulsed cadence)
 // - Right Hazard: 2900 Hz tone (Sharper high tone, alternating cadence)
-// - Dual Hazard (Both Sides): Rapid dual-chirp switching between 2400 Hz and 3400 Hz!
+// - Front Hazard: 1800 Hz urgent pulsing beep
+// - Dual / Multi Hazard: Rapid dual-chirp switching between 2400 Hz and 3400 Hz
+constexpr uint32_t BUZZER_FREQ_FRONT_HZ   = 1800;
 constexpr uint32_t BUZZER_FREQ_LEFT_HZ    = 2200;
 constexpr uint32_t BUZZER_FREQ_RIGHT_HZ   = 2900;
 constexpr uint32_t BUZZER_FREQ_DUAL_LO_HZ = 2400;
@@ -66,7 +77,8 @@ constexpr uint32_t BUZZER_FREQ_DUAL_HI_HZ = 3400;
 // Cadence timings in milliseconds:
 constexpr uint32_t BUZZER_SINGLE_ON_MS    = 100;
 constexpr uint32_t BUZZER_SINGLE_OFF_MS   = 120;
-
+constexpr uint32_t BUZZER_FRONT_ON_MS     = 60;
+constexpr uint32_t BUZZER_FRONT_OFF_MS    = 60;
 constexpr uint32_t BUZZER_DUAL_CHIRP_MS   = 50;  // Ultra-rapid alert burst
 
 // =============================================================================

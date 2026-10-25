@@ -6,7 +6,7 @@ This document illustrates the complete physical and functional architecture of t
 
 ## 1. 2D Physical Layout and Component Wiring
 
-Below is a 2D visual representation of the ESP32 microcontroller board and all connected peripheral components. It shows how the hardware modules wire into the specific header pins of the 38-pin DevKit V1.
+Below is a 2D visual representation of the ESP32 microcontroller board and all connected peripheral components. It details the exact wiring of the dual IR presence sensors, cockpit buzzer, SSD1306 OLED, and the HC-SR04 ultrasonic sensor with its 1kΩ / 2.7kΩ voltage divider.
 
 ```text
  ┌─────────────────────────┐                                 ┌─────────────────────────┐
@@ -22,51 +22,62 @@ Below is a 2D visual representation of the ESP32 microcontroller board and all c
         │     │    │            ESP32 DEVKIT V1                 │   │     │
         │     │    │               (38-PIN)                     │   │     │
         │     │    │                                            │   │     │
-        │     │    │  [3V3] ──────── Power (3.3V) Rail ─────────┼───┤     │
+        │     │    │  [VIN] ──────── 5V DC Supply Rail ─────────┼───┤     │
+        │     │    │  [3V3] ──────── 3.3V DC Logic Rail ────────┼───┤     │
         │     │    │  [GND] ──────── Common Ground Rail ────────┼───┼─────┤
         │     │    │                                            │   │     │
         │     └────┤► [GND]                        [GPIO 22] ◄──┼───┼─────┼───────┐ (SCL)
         └──────────┤► [3V3]                        [GPIO 21] ◄──┼───┼─────┼───┐   │ (SDA)
                    │  [GPIO 34] ◄── (Left DO)      [GPIO 25] ───┼───┼─┐   │   │   │ (Tone)
-                   │  [GPIO 35] ◄── (Right DO)     [GND]        │   │ │   │   │   │
-                   │                                            │   │ │   │   │   │
-                   └────────────────────────────────────────────┘   │ │   │   │   │
-                                                                    │ │   │   │   │
-             ┌──────────────────────────────────────────────────────┘ │   │   │   │
-             │                                                        │   │   │   │
-             ▼                                                        ▼   ▼   ▼   ▼
- ┌─────────────────────────┐                                ┌─────────────────────────┐
- │   BUZZER MODULE         │                                │   SSD1306 OLED (128x64) │
- │   (Active or Passive)   │                                │   (I2C Display)         │
- │  ┌───────────────────┐  │                                │  ┌───────────────────┐  │
- │  │ [GND] [VCC] [SIG] │  │                                │  │[GND] [VCC] [SCL] [SDA]
- └──┴───┬─────┬─────▲───┴──┘                                └──┴──┬─────┬─────▲─────▲─┘
-        │     │     │ (GPIO 25 PWM)                               │     │     │     │
-        │     └─────┼──────────────── 3.3V Rail ──────────────────┼─────┘     │     │
-        └───────────┼──────────────── Ground Rail ────────────────┘           │     │
-                    │                                                         │     │
-                    └─────────────────────────────────────────────────────────┼─────┘
-                                                                              │
-                                       (ESP32 GPIO 22 Clock) ─────────────────┘
+                   │  [GPIO 35] ◄── (Right DO)     [GPIO 26] ───┼───┼─┼───┼───┼───┼─────┐ (TRIG)
+                   │  [GPIO 36] ◄── (ECHO Divided) [GND]        │   │ │   │   │   │     │
+                   └──────────────────▲─────────────────────────┘   │ │   │   │   │     │
+                                      │                             │ │   │   │   │     │
+                       (Row 11 / ~3.3V)                             │ │   │   │   │     │
+                                      │                             │ │   │   │   │     │
+                      [ 1kΩ Resistor ]                              │ │   │   │   │     │
+                                      │                             │ │   │   │   │     │
+                 (Row 10) ◄───────────┼─────────────────────────────┼─┼───┼───┼───┼──┐  │
+                 [ 2.7kΩ to GND ]     │                             │ │   │   │   │  │  │
+                                      │                             │ │   │   │   │  │  │
+             ┌────────────────────────┘                             │ │   │   │   │  │  │
+             │                                                      │ │   │   │   │  │  │
+             ▼                                                      ▼ ▼   ▼   ▼   ▼  ▼  ▼
+ ┌─────────────────────────┐                              ┌─────────────────────────┐ ┌─────────────────────────┐
+ │   BUZZER MODULE         │                              │   SSD1306 OLED (128x64) │ │   HC-SR04 ULTRASONIC    │
+ │   (Active or Passive)   │                              │   (I2C Display)         │ │   (Front Headway)       │
+ │  ┌───────────────────┐  │                              │  ┌───────────────────┐  │ │  ┌───────────────────┐  │
+ │  │ [GND] [VCC] [SIG] │  │                              │  │[GND] [VCC] [SCL] [SDA│ │  │[VCC] [TRIG][ECHO][GND]│
+ └──┴───┬─────┬─────▲───┴──┘                              └──┴──┬─────┬─────▲─────▲─┘ └──┴──┬─────▲─────┬────┬───┘
+        │     │     │ (GPIO 25 PWM)                             │     │     │     │         │     │     │    │
+        │     └─────┼──────────────── 3.3V Rail ────────────────┼─────┘     │     │         │     │     │    │
+        └───────────┼──────────────── Ground Rail ──────────────┴───────────┼─────┼─────────┼─────┼─────┼────┘
+                    │                                                       │     │         │     │     │
+                    │                                                       │     │    (5V) ┘     │     │
+                    │                                                       │     │               │     │
+                    │                      (ESP32 GPIO 21 SDA) ─────────────┼─────┘               │     │
+                    │                      (ESP32 GPIO 22 SCL) ─────────────┘                     │     │
+                    │                                                                             │     │
+                    └─────────────────────────────────────────────────────────────────────────────┼─────┘
+                                           (ESP32 GPIO 26 Trigger Pulse) ─────────────────────────┘
 ```
 
 ---
 
 ## 2. Complete Pin Assignment Matrix
 
-The following table details every active and reserved connection on the ESP32 board:
-
-| ESP32 Pin | Function | Peripheral | Pin on Peripheral | Voltage Logic | Details / Notes |
+| ESP32 Pin | Function | Peripheral | Pin on Peripheral | Logic Level | Electrical Notes |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **GPIO 34** | Digital Input | Left IR Module | DO (Digital Out) | 3.3V Logic | Input-only pin (GPI). Active-LOW detection signal. |
-| **GPIO 35** | Digital Input | Right IR Module | DO (Digital Out) | 3.3V Logic | Input-only pin (GPI). Active-LOW detection signal. |
-| **GPIO 25** | PWM Output | Cockpit Buzzer | SIG / I/O | 3.3V PWM | Driven by LEDC Channel 0 (8-bit resolution, multi-tone). |
-| **GPIO 21** | I2C Data | SSD1306 OLED | SDA | 3.3V Logic | ESP32 default hardware I2C data line. 400 kHz fast mode. |
-| **GPIO 22** | I2C Clock | SSD1306 OLED | SCL | 3.3V Logic | ESP32 default hardware I2C clock line. 400 kHz fast mode. |
-| **GPIO 26** | Digital Output | Ultrasonic (Optional) | TRIG | 3.3V Logic | Reserved for optional HC-SR04 front sensor. |
-| **GPIO 36** | Digital Input | Ultrasonic (Optional) | ECHO | 3.3V (Divided) | Reserved for optional HC-SR04 front sensor (requires divider). |
-| **3V3** | Power Output | All modules | VCC | 3.3V DC | Regulated onboard 3.3V supply rail. |
-| **GND** | Ground | All modules | GND | 0V Reference | Common reference ground rail across all modules. |
+| **GPIO 34** | Digital Input | Left IR Sensor | DO (Digital Out) | 3.3V Logic | Input-only (GPI). Active-LOW optical comparator. |
+| **GPIO 35** | Digital Input | Right IR Sensor | DO (Digital Out) | 3.3V Logic | Input-only (GPI). Active-LOW optical comparator. |
+| **GPIO 26** | Digital Output | Ultrasonic Sensor | TRIG | 3.3V Output | Generates 10µs ultrasonic start pulse. |
+| **GPIO 36 (VP)**| Digital Input | Ultrasonic Sensor | ECHO (via divider) | ~3.3V Input | Input-only (GPI). Stepped down from 5V via 1kΩ / 2.7kΩ divider. |
+| **GPIO 25** | PWM Output | Cockpit Buzzer | SIG / I/O | 3.3V PWM | Driven by LEDC Channel 0 (8-bit multi-frequency tone). |
+| **GPIO 21** | I2C Data | SSD1306 OLED | SDA | 3.3V Logic | ESP32 hardware Wire data line. 400 kHz fast mode. |
+| **GPIO 22** | I2C Clock | SSD1306 OLED | SCL | 3.3V Logic | ESP32 hardware Wire clock line. 400 kHz fast mode. |
+| **VIN** | 5V Power | HC-SR04 | VCC | 5V DC | 5V power supply from USB bus. |
+| **3V3** | 3.3V Power | IR & OLED & Buzzer | VCC | 3.3V DC | Regulated onboard 3.3V logic rail. |
+| **GND** | Ground | All peripherals | GND | 0V Reference | Common reference ground shared across all components. |
 
 ---
 
@@ -74,74 +85,44 @@ The following table details every active and reserved connection on the ESP32 bo
 
 ```mermaid
 graph TD
-    subgraph SENSING ["1. SENSING LAYER (100 Hz Non-Blocking)"]
+    subgraph SENSING ["1. SENSING LAYER"]
         IR_L["Left IR Sensor (GPIO 34)\nActive-LOW Optical Comparator"]
         IR_R["Right IR Sensor (GPIO 35)\nActive-LOW Optical Comparator"]
+        US_FRONT["HC-SR04 Front Sensor\nTRIG: GPIO 26 | ECHO: GPIO 36 via Divider"]
     end
 
     subgraph PROCESSING ["2. SIGNAL CONDITIONING & LOGIC"]
         DEB_L["Left Glitch Filter (15 ms)"]
         DEB_R["Right Glitch Filter (15 ms)"]
-        FSM{"4-State FSM Engine\n(Evaluates Safety State)"}
+        US_FILTER["Pulse Conversion & Validity Range Filter (2-300 cm)"]
+        FSM{"State Engine Resolver\n(CLEAR / LEFT / RIGHT / FRONT / DUAL / MULTI)"}
     end
 
     subgraph OUTPUTS ["3. COCKPIT ACTUATION LAYER"]
-        BUZZ["Buzzer Controller (GPIO 25)\n- Left: 2200 Hz Tone\n- Right: 2900 Hz Tone\n- Dual: 3400/2400 Hz Warble\n- Clear: 0 Hz Silence"]
-        OLED["SSD1306 HUD (GPIO 21/22)\n- 16 FPS Top-Down Truck View\n- Dynamic Radar Wave Arcs\n- Backward Flowing Road Markers\n- Fail-Safe 50ms Timeout"]
-        UART["Serial Diagnostics\n- 115200 Baud Diagnostic Stream\n- Frame, Raw Readings & State"]
+        BUZZ["Buzzer Controller (GPIO 25)\n- Left: 2200 Hz\n- Right: 2900 Hz\n- Front: 1800 Hz\n- Dual/Multi: 3400/2400 Hz Warble"]
+        OLED["SSD1306 HUD (GPIO 21/22)\n- 16 FPS Top-Down Vehicle Wireframe\n- Live Distance Reading (e.g. 15cm)\n- Dynamic Side Radar Wave Arcs\n- Road Guide Markers"]
+        UART["Serial Diagnostics\n- 115200 Baud Telemetry Stream"]
     end
 
     IR_L --> DEB_L
     IR_R --> DEB_R
+    US_FRONT --> US_FILTER
+
     DEB_L --> FSM
     DEB_R --> FSM
+    US_FILTER --> FSM
 
-    FSM -->|SAFE_CLEAR| BUZZ
-    FSM -->|WARN_LEFT| BUZZ
-    FSM -->|WARN_RIGHT| BUZZ
-    FSM -->|WARN_BOTH| BUZZ
-
+    FSM --> BUZZ
     FSM --> OLED
     FSM --> UART
 ```
 
 ---
 
-## 4. Software Subsystems and Execution Flow
+## 4. Voltage Divider Calculation for HC-SR04 Echo
 
-The firmware is structured into four cooperative, non-blocking subsystems that run sequentially on each pass of the main `loop()`:
+The HC-SR04 Echo pin outputs 5.0V pulses, which exceeds the ESP32 input tolerance. Placing a 1kΩ resistor in series and a 2.7kΩ resistor to ground forms a voltage divider:
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant Main as main.cpp
-    participant Sensors as SensorManager
-    participant FSM as State Engine
-    participant Buzzer as BuzzerController
-    participant OLED as DisplayController
+$$V_{out} = V_{in} \times \frac{R_2}{R_1 + R_2} = 5.0\text{V} \times \frac{2700}{1000 + 2700} = 3.65\text{V}$$
 
-    loop Every 10ms (100 Hz Loop)
-        Main->>Sensors: update(now)
-        Sensors-->>Main: SensorData (debounced flags)
-        Main->>FSM: evaluateState(data)
-        FSM-->>Main: BsmState (SAFE / LEFT / RIGHT / BOTH)
-        Main->>Buzzer: update(state, now)
-        Note over Buzzer: Updates LEDC PWM tone or silence
-        Main->>OLED: update(data, state, now)
-        Note over OLED: Refreshes graphics every 60ms (~16 FPS)
-    end
-```
-
-### Subsystem Breakdown:
-1. **SensorManager (`src/sensors.h / .cpp`)**:
-   - Reads GPIO 34 and GPIO 35.
-   - Applies an asynchronous 15 ms debounce window so mechanical vibrations or quick flickers do not disrupt warning states.
-2. **State Engine (`src/main.cpp`)**:
-   - Pure deterministic resolution. Evaluates whether both sides, one side, or no sides are obstructed.
-3. **BuzzerController (`src/buzzer.h / .cpp`)**:
-   - Manages an ESP32 LEDC timer channel on GPIO 25.
-   - Generates clean square-wave acoustic frequencies with zero CPU overhead once started.
-   - Immediately cuts power when returning to `SAFE_CLEAR` state.
-4. **DisplayController (`src/display.h / .cpp`)**:
-   - Renders animated top-down pixel art on the SSD1306 monochrome screen at approximately 16 frames per second.
-   - Operates in 400 kHz fast I2C mode. Employs hardware bus timeout handling to guarantee the main loop never halts if the screen is disconnected.
+Under pin impedance loading, this drops to ~3.3V, providing a clean logic level that does not stress the ESP32 input stage.

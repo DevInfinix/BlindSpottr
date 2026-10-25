@@ -13,8 +13,15 @@ static BsmState currentState = BsmState::SAFE_CLEAR;
 static uint32_t lastDiagnosticsMs = 0;
 
 static BsmState evaluateState(const SensorData& data) {
-    if (data.leftObstacle && data.rightObstacle) {
+    const bool sideBoth = (data.leftObstacle && data.rightObstacle);
+    const bool front = (data.frontValid && data.frontObstacle);
+
+    if (front && (data.leftObstacle || data.rightObstacle)) {
+        return BsmState::WARN_MULTI;
+    } else if (sideBoth) {
         return BsmState::WARN_BOTH;
+    } else if (front) {
+        return BsmState::WARN_FRONT;
     } else if (data.leftObstacle) {
         return BsmState::WARN_LEFT;
     } else if (data.rightObstacle) {
@@ -29,21 +36,27 @@ static void printDiagnostics(const SensorData& data, BsmState state, uint32_t no
     }
     lastDiagnosticsMs = now;
 
-    Serial.print(F("LEFT_RAW="));
-    Serial.print(data.leftRaw);
-    Serial.print(F(" ["));
-    Serial.print(data.leftObstacle ? F("OBJECT") : F("CLEAR"));
-    Serial.print(F("] | RIGHT_RAW="));
-    Serial.print(data.rightRaw);
-    Serial.print(F(" ["));
-    Serial.print(data.rightObstacle ? F("OBJECT") : F("CLEAR"));
-    Serial.print(F("] | STATE="));
+    Serial.print(F("L="));
+    Serial.print(data.leftObstacle ? F("OBJ") : F("CLR"));
+    Serial.print(F(" | R="));
+    Serial.print(data.rightObstacle ? F("OBJ") : F("CLR"));
+    Serial.print(F(" | FRONT="));
+    if (data.frontValid) {
+        Serial.print((int)data.frontDistanceCm);
+        Serial.print(F("cm"));
+        if (data.frontObstacle) Serial.print(F(" [WARN]"));
+    } else {
+        Serial.print(F("---"));
+    }
+    Serial.print(F(" | STATE="));
 
     switch (state) {
-        case BsmState::SAFE_CLEAR: Serial.println(F("ROAD_CLEAR (Buzzer Silent)")); break;
-        case BsmState::WARN_LEFT:  Serial.println(F("LEFT_HAZARD (Buzzer 2200Hz Beep)")); break;
-        case BsmState::WARN_RIGHT: Serial.println(F("RIGHT_HAZARD (Buzzer 2900Hz Beep)")); break;
-        case BsmState::WARN_BOTH:  Serial.println(F("DUAL_HAZARD (Buzzer 3400/2400Hz Rapid Chirp)")); break;
+        case BsmState::SAFE_CLEAR: Serial.println(F("ROAD_CLEAR")); break;
+        case BsmState::WARN_LEFT:  Serial.println(F("LEFT_HAZARD (2200Hz)")); break;
+        case BsmState::WARN_RIGHT: Serial.println(F("RIGHT_HAZARD (2900Hz)")); break;
+        case BsmState::WARN_FRONT: Serial.println(F("FRONT_HAZARD (1800Hz)")); break;
+        case BsmState::WARN_BOTH:  Serial.println(F("DUAL_HAZARD (Warble)")); break;
+        case BsmState::WARN_MULTI: Serial.println(F("MULTI_HAZARD (Warble)")); break;
     }
 }
 
@@ -53,20 +66,20 @@ void setup() {
 
     Serial.println();
     Serial.println(F("=================================================="));
-    Serial.println(F("  BLINDSPOTTR — TOY TRUCK BSM FIRMWARE v2.0"));
+    Serial.println(F("  BLINDSPOTTR — TOY TRUCK BSM FIRMWARE v2.1"));
     Serial.println(F("=================================================="));
 
     // 1. Initialize Buzzer Controller on GPIO 25 with tone generation
     buzzer.begin();
     buzzer.silence();
 
-    // 2. Initialize IR sensors on verified GPIO 34 & 35
+    // 2. Initialize IR sensors (GPIO 34 & 35) and Ultrasonic (GPIO 26 & 36)
     sensors.begin();
 
     // 3. Initialize OLED Display on GPIO 21 & 22 with Graphical Dashboard
     display.begin();
 
-    Serial.println(F("[INFO] System online. Dashboard and audio alerts active."));
+    Serial.println(F("[INFO] System online. Ultrasonic, optical sensors & audio active."));
 }
 
 void loop() {
