@@ -47,7 +47,7 @@ BlindSpottr uses a non-blocking loop running on an ESP32. It samples two infrare
                  ┌──────────────────────┐
                  │     TOY TRUCK CAB    │
        [Left IR] │                      │ [Right IR]
-       (GPIO 34) │                      │ (GPIO 35)
+       (GPIO 35) │                      │ (GPIO 32)
           ◄──────┤                      ├──────►
        Left Zone │                      │ Right Zone
                  │      CARGO BED       │
@@ -65,7 +65,6 @@ BlindSpottr uses a non-blocking loop running on an ESP32. It samples two infrare
 - Tone separation: Left, right, and front warnings use different sound frequencies. A driver can tell where an obstacle is located by pitch alone.
 - Isolated I2C handling: The display controller sets a 50 ms bus timeout and scans for device addresses at startup. If the screen disconnects or glitches, sensor polling and audio alerts keep running.
 - Noise filtering: Raw sensor reads pass through a 15 ms debouncer before triggering a state change, filtering out transient reflections.
-- Ultrasonic protection: The HC-SR04 5V echo pulse is stepped down to ~3.3V through a 1kΩ / 2.7kΩ resistor divider to protect ESP32 GPIO 36 (VP).
 
 ---
 
@@ -74,9 +73,9 @@ BlindSpottr uses a non-blocking loop running on an ESP32. It samples two infrare
 ```mermaid
 graph TD
     subgraph SENSORS ["Sensing subsystem (100 Hz)"]
-        IR_L["Left optical sensor (GPIO 34)"]
-        IR_R["Right optical sensor (GPIO 35)"]
-        US["Front ultrasonic sensor (TRIG: 26, ECHO: 36 via Divider)"]
+        IR_L["Left optical sensor (GPIO 35)"]
+        IR_R["Right optical sensor (GPIO 32)"]
+        US["Front ultrasonic sensor (TRIG: 26, ECHO: 36)"]
     end
 
     subgraph ENGINE ["State machine"]
@@ -155,33 +154,27 @@ The buzzer module connects to GPIO 25 and runs through ESP32 hardware PWM (LEDC 
  │  │ [VCC] [GND] [DO]  │  │                                 │  │ [VCC] [GND] [DO]  │  │
  └──┴───┬─────┬────┬────┴──┘                                 └──┴───┬─────┬────┬────┴──┘
         │     │    │                                                │     │    │
-        │     │    └───────────────────────┐   ┌────────────────────┼─────┼────┘
-        │     │                            │   │                    │     │
-        │     │    ┌───────────────────────┴───┴────────────────┐   │     │
-        │     │    │            ESP32 DEVKIT V1                 │   │     │
-        │     │    │               (38-PIN)                     │   │     │
-        │     │    │                                            │   │     │
-        │     │    │  [VIN] ──────── 5V DC Supply Rail ─────────┼───┤     │
-        │     │    │  [3V3] ──────── 3.3V DC Logic Rail ────────┼───┤     │
-        │     │    │  [GND] ──────── Common Ground Rail ────────┼───┼─────┤
-        │     │    │                                            │   │     │
-        │     └────┤► [GND]                        [GPIO 22] ◄──┼───┼─────┼───────┐ (SCL)
-        └──────────┤► [3V3]                        [GPIO 21] ◄──┼───┼─────┼───┐   │ (SDA)
-                   │  [GPIO 34] ◄── (Left DO)      [GPIO 25] ───┼───┼─┐   │   │   │ (Tone)
-                   │  [GPIO 35] ◄── (Right DO)     [GPIO 26] ───┼───┼─┼───┼───┼───┼─────┐ (TRIG)
-                   │  [GPIO 36] ◄── (ECHO Divided) [GND]        │   │ │   │   │   │     │
-                   └──────────────────▲─────────────────────────┘   │ │   │   │   │     │
-                                      │                             │ │   │   │   │     │
-                       (Row 11 / ~3.3V)                             │ │   │   │   │     │
-                                      │                             │ │   │   │   │     │
-                      [ 1kΩ Resistor ]                              │ │   │   │   │     │
-                                      │                             │ │   │   │   │     │
-                 (Row 10) ◄───────────┼─────────────────────────────┼─┼───┼───┼───┼──┐  │
-                 [ 2.7kΩ to GND ]     │                             │ │   │   │   │  │  │
-                                      │                             │ │   │   │   │  │  │
-             ┌────────────────────────┘                             │ │   │   │   │  │  │
-             │                                                      │ │   │   │   │  │  │
-             ▼                                                      ▼ ▼   ▼   ▼   ▼  ▼  ▼
+        │     │    └──────────────────────────────────────┐         │     │    │
+        │     │                                           │         │     │    │
+        │     │    ┌──────────────────────────────────────┴─────────┼─────┼────┘
+        │     │    │            ESP32 DEVKIT V1                     │     │
+        │     │    │               (38-PIN)                         │     │
+        │     │    │                                                │     │
+        │     │    │  [VIN] ──────── 5V DC Supply Rail ─────────────┼─────┤
+        │     │    │  [3V3] ──────── 3.3V DC Logic Rail ────────────┼─────┤
+        │     │    │  [GND] ──────── Common Ground Rail ────────────┼─────┤
+        │     │    │                                                │     │
+        │     └────┤► [GND]                            [GPIO 22] ◄──┼─────┼───────┐ (SCL)
+        └──────────┤► [3V3]                            [GPIO 21] ◄──┼─────┼───┐   │ (SDA)
+                   │  [GPIO 35] ◄── (Left DO)          [GPIO 25] ───┼─────┼─┐ │   │   │ (Tone)
+                   │  [GPIO 32] ◄── (Right DO)         [GPIO 26] ───┼─────┼─┼─┼───┼───┼─────┐ (TRIG)
+                   │  [GPIO 36] ◄── (ECHO Pulse)       [GND]        │     │ │ │   │   │     │
+                   └──────────────────▲─────────────────────────────┘     │ │ │   │   │     │
+                                      │                                   │ │ │   │   │     │
+                                      │                                   │ │ │   │   │     │
+             ┌────────────────────────┘                                   │ │ │   │   │     │
+             │                                                            │ │ │   │   │     │
+             ▼                                                            ▼ ▼ ▼   ▼   ▼     ▼
  ┌─────────────────────────┐                              ┌─────────────────────────┐ ┌─────────────────────────┐
  │   BUZZER MODULE         │                              │   SSD1306 OLED (128x64) │ │   HC-SR04 ULTRASONIC    │
  │   (Active or Passive)   │                              │   (I2C Display)         │ │   (Front Headway)       │
@@ -203,10 +196,10 @@ The buzzer module connects to GPIO 25 and runs through ESP32 hardware PWM (LEDC 
 
 | Subsystem | Signal | ESP32 GPIO | Pin type | Wiring note |
 | :--- | :--- | :---: | :---: | :--- |
-| Left IR sensor | `PIN_IR_LEFT` | GPIO 34 | Input | Input-only (GPI). Active-low optical comparator |
-| Right IR sensor | `PIN_IR_RIGHT` | GPIO 35 | Input | Input-only (GPI). Active-low optical comparator |
+| Left IR sensor | `PIN_IR_LEFT` | GPIO 35 | Input | Input-only (GPI). Active-low optical comparator |
+| Right IR sensor | `PIN_IR_RIGHT` | GPIO 32 | Input | Digital input with pull-up. Active-low optical comparator |
 | Ultrasonic trigger | `PIN_US_TRIG` | GPIO 26 | Output | 10 microsecond trigger pulse |
-| Ultrasonic echo | `PIN_US_ECHO` | GPIO 36 (VP) | Input | Stepped down from 5V via 1kΩ / 2.7kΩ resistor divider |
+| Ultrasonic echo | `PIN_US_ECHO` | GPIO 36 (VP) | Input | Ultrasonic echo pulse input |
 | Ultrasonic VCC | VCC | VIN | Power | 5V DC supply from USB bus |
 | Buzzer | `PIN_BUZZER` | GPIO 25 | Output | Driven by LEDC PWM, 8-bit duty resolution |
 | OLED SDA | `PIN_OLED_SDA` | GPIO 21 | I2C Data | 3.3V logic, standard hardware Wire |
@@ -246,7 +239,6 @@ stateDiagram-v2
 - ESP32 development board (38-pin DevKit V1).
 - Two digital infrared obstacle modules (TCRT5000 or LM393 comparator).
 - One HC-SR04 ultrasonic distance sensor.
-- One 1kΩ resistor and one 2.7kΩ resistor (for echo voltage divider).
 - One 0.96 inch SSD1306 I2C OLED display (128x64).
 - One active or passive buzzer module.
 
@@ -287,7 +279,7 @@ BlindSpottr/
 │   ├── sensors.h / .cpp   # Debounced optical reading and ultrasonic distance tracking
 │   ├── display.h / .cpp   # OLED HUD rendering and animation
 │   └── buzzer.h / .cpp    # Multi-frequency buzzer driver using LEDC PWM
-└── docs/                  # Architecture and technical reference documents
+└── docs/                  # Architecture, specifications, and prompt library
 ```
 
 ---

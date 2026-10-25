@@ -6,7 +6,7 @@ This document illustrates the complete physical and functional architecture of t
 
 ## 1. 2D Physical Layout and Component Wiring
 
-Below is a 2D visual representation of the ESP32 microcontroller board and all connected peripheral components. It details the exact wiring of the dual IR presence sensors, cockpit buzzer, SSD1306 OLED, and the HC-SR04 ultrasonic sensor with its 1kΩ / 2.7kΩ voltage divider.
+Below is a 2D visual representation of the ESP32 microcontroller board and all connected peripheral components. It details the exact verified physical wiring of the dual IR presence sensors, cockpit buzzer, SSD1306 OLED, and the HC-SR04 ultrasonic sensor.
 
 ```text
  ┌─────────────────────────┐                                 ┌─────────────────────────┐
@@ -16,33 +16,27 @@ Below is a 2D visual representation of the ESP32 microcontroller board and all c
  │  │ [VCC] [GND] [DO]  │  │                                 │  │ [VCC] [GND] [DO]  │  │
  └──┴───┬─────┬────┬────┴──┘                                 └──┴───┬─────┬────┬────┴──┘
         │     │    │                                                │     │    │
-        │     │    └───────────────────────┐   ┌────────────────────┼─────┼────┘
-        │     │                            │   │                    │     │
-        │     │    ┌───────────────────────┴───┴────────────────┐   │     │
-        │     │    │            ESP32 DEVKIT V1                 │   │     │
-        │     │    │               (38-PIN)                     │   │     │
-        │     │    │                                            │   │     │
-        │     │    │  [VIN] ──────── 5V DC Supply Rail ─────────┼───┤     │
-        │     │    │  [3V3] ──────── 3.3V DC Logic Rail ────────┼───┤     │
-        │     │    │  [GND] ──────── Common Ground Rail ────────┼───┼─────┤
-        │     │    │                                            │   │     │
-        │     └────┤► [GND]                        [GPIO 22] ◄──┼───┼─────┼───────┐ (SCL)
-        └──────────┤► [3V3]                        [GPIO 21] ◄──┼───┼─────┼───┐   │ (SDA)
-                   │  [GPIO 34] ◄── (Left DO)      [GPIO 25] ───┼───┼─┐   │   │   │ (Tone)
-                   │  [GPIO 35] ◄── (Right DO)     [GPIO 26] ───┼───┼─┼───┼───┼───┼─────┐ (TRIG)
-                   │  [GPIO 36] ◄── (ECHO Divided) [GND]        │   │ │   │   │   │     │
-                   └──────────────────▲─────────────────────────┘   │ │   │   │   │     │
-                                      │                             │ │   │   │   │     │
-                       (Row 11 / ~3.3V)                             │ │   │   │   │     │
-                                      │                             │ │   │   │   │     │
-                      [ 1kΩ Resistor ]                              │ │   │   │   │     │
-                                      │                             │ │   │   │   │     │
-                 (Row 10) ◄───────────┼─────────────────────────────┼─┼───┼───┼───┼──┐  │
-                 [ 2.7kΩ to GND ]     │                             │ │   │   │   │  │  │
-                                      │                             │ │   │   │   │  │  │
-             ┌────────────────────────┘                             │ │   │   │   │  │  │
-             │                                                      │ │   │   │   │  │  │
-             ▼                                                      ▼ ▼   ▼   ▼   ▼  ▼  ▼
+        │     │    └──────────────────────────────────────┐         │     │    │
+        │     │                                           │         │     │    │
+        │     │    ┌──────────────────────────────────────┴─────────┼─────┼────┘
+        │     │    │            ESP32 DEVKIT V1                     │     │
+        │     │    │               (38-PIN)                         │     │
+        │     │    │                                                │     │
+        │     │    │  [VIN] ──────── 5V DC Supply Rail ─────────────┼─────┤
+        │     │    │  [3V3] ──────── 3.3V DC Logic Rail ────────────┼─────┤
+        │     │    │  [GND] ──────── Common Ground Rail ────────────┼─────┤
+        │     │    │                                                │     │
+        │     └────┤► [GND]                            [GPIO 22] ◄──┼─────┼───────┐ (SCL)
+        └──────────┤► [3V3]                            [GPIO 21] ◄──┼─────┼───┐   │ (SDA)
+                   │  [GPIO 35] ◄── (Left DO)          [GPIO 25] ───┼─────┼─┐ │   │   │ (Tone)
+                   │  [GPIO 32] ◄── (Right DO)         [GPIO 26] ───┼─────┼─┼─┼───┼───┼─────┐ (TRIG)
+                   │  [GPIO 36] ◄── (ECHO Pulse)       [GND]        │     │ │ │   │   │     │
+                   └──────────────────▲─────────────────────────────┘     │ │ │   │   │     │
+                                      │                                   │ │ │   │   │     │
+                                      │                                   │ │ │   │   │     │
+             ┌────────────────────────┘                                   │ │ │   │   │     │
+             │                                                            │ │ │   │   │     │
+             ▼                                                            ▼ ▼ ▼   ▼   ▼     ▼
  ┌─────────────────────────┐                              ┌─────────────────────────┐ ┌─────────────────────────┐
  │   BUZZER MODULE         │                              │   SSD1306 OLED (128x64) │ │   HC-SR04 ULTRASONIC    │
  │   (Active or Passive)   │                              │   (I2C Display)         │ │   (Front Headway)       │
@@ -68,10 +62,10 @@ Below is a 2D visual representation of the ESP32 microcontroller board and all c
 
 | ESP32 Pin | Function | Peripheral | Pin on Peripheral | Logic Level | Electrical Notes |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **GPIO 34** | Digital Input | Left IR Sensor | DO (Digital Out) | 3.3V Logic | Input-only (GPI). Active-LOW optical comparator. |
-| **GPIO 35** | Digital Input | Right IR Sensor | DO (Digital Out) | 3.3V Logic | Input-only (GPI). Active-LOW optical comparator. |
+| **GPIO 35** | Digital Input | Left IR Sensor | DO (Digital Out) | 3.3V Logic | Input-only (GPI). Active-LOW optical comparator. |
+| **GPIO 32** | Digital Input | Right IR Sensor | DO (Digital Out) | 3.3V Logic | Digital Input with pull-up capability. Active-LOW. |
 | **GPIO 26** | Digital Output | Ultrasonic Sensor | TRIG | 3.3V Output | Generates 10µs ultrasonic start pulse. |
-| **GPIO 36 (VP)**| Digital Input | Ultrasonic Sensor | ECHO (via divider) | ~3.3V Input | Input-only (GPI). Stepped down from 5V via 1kΩ / 2.7kΩ divider. |
+| **GPIO 36 (VP)**| Digital Input | Ultrasonic Sensor | ECHO | ~3.3V Input | Input-only (GPI). Reads echo pulse width. |
 | **GPIO 25** | PWM Output | Cockpit Buzzer | SIG / I/O | 3.3V PWM | Driven by LEDC Channel 0 (8-bit multi-frequency tone). |
 | **GPIO 21** | I2C Data | SSD1306 OLED | SDA | 3.3V Logic | ESP32 hardware Wire data line. 400 kHz fast mode. |
 | **GPIO 22** | I2C Clock | SSD1306 OLED | SCL | 3.3V Logic | ESP32 hardware Wire clock line. 400 kHz fast mode. |
@@ -86,15 +80,15 @@ Below is a 2D visual representation of the ESP32 microcontroller board and all c
 ```mermaid
 graph TD
     subgraph SENSING ["1. SENSING LAYER"]
-        IR_L["Left IR Sensor (GPIO 34)\nActive-LOW Optical Comparator"]
-        IR_R["Right IR Sensor (GPIO 35)\nActive-LOW Optical Comparator"]
-        US_FRONT["HC-SR04 Front Sensor\nTRIG: GPIO 26 | ECHO: GPIO 36 via Divider"]
+        IR_L["Left IR Sensor (GPIO 35)\nActive-LOW Optical Comparator"]
+        IR_R["Right IR Sensor (GPIO 32)\nActive-LOW Optical Comparator"]
+        US_FRONT["HC-SR04 Front Sensor\nTRIG: GPIO 26 | ECHO: GPIO 36"]
     end
 
     subgraph PROCESSING ["2. SIGNAL CONDITIONING & LOGIC"]
         DEB_L["Left Glitch Filter (15 ms)"]
         DEB_R["Right Glitch Filter (15 ms)"]
-        US_FILTER["Pulse Conversion & Validity Range Filter (2-300 cm)"]
+        US_FILTER["Pulse Conversion & Range Validation (2-300 cm)"]
         FSM{"State Engine Resolver\n(CLEAR / LEFT / RIGHT / FRONT / DUAL / MULTI)"}
     end
 
@@ -116,13 +110,3 @@ graph TD
     FSM --> OLED
     FSM --> UART
 ```
-
----
-
-## 4. Voltage Divider Calculation for HC-SR04 Echo
-
-The HC-SR04 Echo pin outputs 5.0V pulses, which exceeds the ESP32 input tolerance. Placing a 1kΩ resistor in series and a 2.7kΩ resistor to ground forms a voltage divider:
-
-$$V_{out} = V_{in} \times \frac{R_2}{R_1 + R_2} = 5.0\text{V} \times \frac{2700}{1000 + 2700} = 3.65\text{V}$$
-
-Under pin impedance loading, this drops to ~3.3V, providing a clean logic level that does not stress the ESP32 input stage.

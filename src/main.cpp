@@ -36,15 +36,15 @@ static void printDiagnostics(const SensorData& data, BsmState state, uint32_t no
     }
     lastDiagnosticsMs = now;
 
-    Serial.print(F("L="));
-    Serial.print(data.leftObstacle ? F("OBJ") : F("CLR"));
-    Serial.print(F(" | R="));
-    Serial.print(data.rightObstacle ? F("OBJ") : F("CLR"));
+    Serial.print(F("LEFT (P35)="));
+    Serial.print(data.leftObstacle ? F("OBJECT") : F("CLEAR"));
+    Serial.print(F(" | RIGHT (P32)="));
+    Serial.print(data.rightObstacle ? F("OBJECT") : F("CLEAR"));
     Serial.print(F(" | FRONT="));
     if (data.frontValid) {
         Serial.print((int)data.frontDistanceCm);
         Serial.print(F("cm"));
-        if (data.frontObstacle) Serial.print(F(" [WARN]"));
+        if (data.frontObstacle) Serial.print(F(" [HAZARD]"));
     } else {
         Serial.print(F("---"));
     }
@@ -66,20 +66,23 @@ void setup() {
 
     Serial.println();
     Serial.println(F("=================================================="));
-    Serial.println(F("  BLINDSPOTTR — TOY TRUCK BSM FIRMWARE v2.1"));
+    Serial.println(F("  BLINDSPOTTR — TOY TRUCK BSM FIRMWARE v2.2"));
     Serial.println(F("=================================================="));
+    Serial.println(F("[CONFIG] Left IR = GPIO 35, Right IR = GPIO 32"));
+    Serial.println(F("[CONFIG] Ultrasonic TRIG = GPIO 26, ECHO = GPIO 36"));
+    Serial.println(F("[CONFIG] Buzzer = GPIO 25, OLED = GPIO 21(SDA), 22(SCL)"));
 
     // 1. Initialize Buzzer Controller on GPIO 25 with tone generation
     buzzer.begin();
     buzzer.silence();
 
-    // 2. Initialize IR sensors (GPIO 34 & 35) and Ultrasonic (GPIO 26 & 36)
+    // 2. Initialize IR sensors and Ultrasonic
     sensors.begin();
 
     // 3. Initialize OLED Display on GPIO 21 & 22 with Graphical Dashboard
     display.begin();
 
-    Serial.println(F("[INFO] System online. Ultrasonic, optical sensors & audio active."));
+    Serial.println(F("[INFO] System online. Dashboard, ultrasonic & audio alerts active."));
 }
 
 void loop() {

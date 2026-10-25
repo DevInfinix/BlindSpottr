@@ -11,14 +11,15 @@
 // =============================================================================
 
 // Left & Right Digital IR Obstacle Sensors
-// Verified physical pin assignments on chassis:
-// GPIO 34 corresponds to the Left side, GPIO 35 corresponds to the Right side
-constexpr uint8_t PIN_IR_LEFT             = 34; // Physical Left IR input
-constexpr uint8_t PIN_IR_RIGHT            = 35; // Physical Right IR input
+// Verified physical soldered pin assignments on chassis:
+// - Left IR DO is connected to GPIO 35
+// - Right IR DO is connected to GPIO 32
+constexpr uint8_t PIN_IR_LEFT             = 35; // Soldered Left IR input
+constexpr uint8_t PIN_IR_RIGHT            = 32; // Soldered Right IR input
 
 // HC-SR04 Front Ultrasonic Distance Sensor
-// TRIG: Direct 3.3V trigger output from ESP32 GPIO 26
-// ECHO: 5V echo pulse stepped down to ~3.3V via 1kΩ / 2.7kΩ voltage divider into GPIO 36 (VP)
+// - TRIG: Output trigger pulse on GPIO 26
+// - ECHO: Direct / divided input on GPIO 36 (labeled 'VP')
 constexpr uint8_t PIN_US_TRIG             = 26;
 constexpr uint8_t PIN_US_ECHO             = 36; // Pin labeled 'VP' on 38-pin DevKit V1
 constexpr bool ENABLE_ULTRASONIC          = true;

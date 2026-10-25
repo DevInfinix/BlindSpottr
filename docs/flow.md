@@ -17,7 +17,7 @@ In real vehicles, blind spots are areas beside and slightly behind the car that 
                  ┌──────────────────────┐
                  │     TOY TRUCK CAB    │
        [Left IR] │                      │ [Right IR]
-       (GPIO 34) │                      │ (GPIO 35)
+       (GPIO 35) │                      │ (GPIO 32)
           ◄──────┤                      ├──────►
        Left Zone │                      │ Right Zone
                  │      CARGO BED       │
@@ -28,8 +28,8 @@ In real vehicles, blind spots are areas beside and slightly behind the car that 
 ```
 
 The system uses:
-1. **Infrared (IR) presence sensors**: Positioned on the left and right flanks of the vehicle to detect nearby objects.
-2. **Ultrasonic distance sensor (HC-SR04)**: Mounted on the front bumper to measure headway distance (2 cm to 300 cm).
+1. **Infrared (IR) presence sensors**: Positioned on the left (GPIO 35) and right (GPIO 32) flanks of the vehicle to detect nearby objects.
+2. **Ultrasonic distance sensor (HC-SR04)**: Mounted on the front bumper (TRIG: GPIO 26, ECHO: GPIO 36) to measure headway distance (2 cm to 300 cm).
 3. **SSD1306 OLED graphic display (128x64)**: Shows a top-down view of the truck, live distance in centimeters, animated radar waves, and text warnings.
 4. **Multi-tone buzzer**: Produces distinct acoustic tones depending on which side or front detects an obstacle so the driver can react without taking their eyes off the road.
 
@@ -40,7 +40,7 @@ The system uses:
 The microcontroller (ESP32) acts as the brain of the vehicle. It executes a continuous loop roughly 100 times per second (100 Hz):
 
 1. **Reading the sensors**:
-   - The ESP32 checks whether the Left IR sensor (GPIO 34) or Right IR sensor (GPIO 35) detects an object.
+   - The ESP32 checks whether the Left IR sensor (GPIO 35) or Right IR sensor (GPIO 32) detects an object.
    - It fires the front ultrasonic sensor (TRIG: GPIO 26) every 80 ms and listens for the returned echo pulse on GPIO 36 (VP).
 2. **Filtering noise**:
    - The raw IR readings pass through a 15 ms software debounce filter.
@@ -64,10 +64,10 @@ The system runs on a 38-pin ESP32 DevKit V1 board:
 
 | Component | Pin on Component | ESP32 GPIO | Electrical description |
 | :--- | :--- | :---: | :--- |
-| **Left IR Sensor** | Digital Output (DO) | **GPIO 34** | Input-only (GPI). Active-LOW optical comparator. |
-| **Right IR Sensor** | Digital Output (DO) | **GPIO 35** | Input-only (GPI). Active-LOW optical comparator. |
+| **Left IR Sensor** | Digital Output (DO) | **GPIO 35** | Input-only (GPI). Active-LOW optical comparator. |
+| **Right IR Sensor** | Digital Output (DO) | **GPIO 32** | Digital input with pull-up. Active-LOW optical comparator. |
 | **HC-SR04 Ultrasonic**| TRIG | **GPIO 26** | 3.3V digital output pulse (10 microseconds). |
-| **HC-SR04 Ultrasonic**| ECHO | **GPIO 36 (VP)**| 5V echo pulse stepped down to ~3.3V via 1kΩ / 2.7kΩ divider. |
+| **HC-SR04 Ultrasonic**| ECHO | **GPIO 36 (VP)**| Echo pulse input pin. |
 | **HC-SR04 Ultrasonic**| VCC | **VIN (5V)** | 5V supply rail from USB power. |
 | **Buzzer Module** | Signal (I/O) | **GPIO 25** | Driven by ESP32 hardware PWM (LEDC timer channel 0). |
 | **OLED Display** | SDA (Data) | **GPIO 21** | I2C serial data line (3.3V logic). |

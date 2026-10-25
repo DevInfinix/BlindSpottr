@@ -35,7 +35,7 @@ Whenever starting a new session or switching tasks, follow this sequence:
    ↓
 4. docs/architecture.md     (Inspect 2D wiring layout, concurrency, and subsystems)
    ↓
-5. docs/design.md           (Review design decisions and state machine semantics)
+5. docs/design.md           (Review visual prompt library and CAD guidelines)
    ↓
 6. TODO.md                  (Identify active phase and task prerequisites)
    ↓
@@ -75,13 +75,13 @@ All hardware pin definitions must be centralized in `include/config.h`. Never ha
 
 | Subsystem | Signal Name | ESP32 GPIO | Electrical / Hardware Constraints |
 | :--- | :--- | :---: | :--- |
-| **Left IR Sensor** | `PIN_IR_LEFT` | **GPIO 34** | Input-only (GPI). Active-LOW optical comparator. Requires module pull-up. |
-| **Right IR Sensor** | `PIN_IR_RIGHT` | **GPIO 35** | Input-only (GPI). Active-LOW optical comparator. Requires module pull-up. |
+| **Left IR Sensor** | `PIN_IR_LEFT` | **GPIO 35** | Input-only (GPI). Active-LOW optical comparator. Requires module pull-up. |
+| **Right IR Sensor** | `PIN_IR_RIGHT` | **GPIO 32** | Digital input with pull-up. Active-LOW optical comparator. |
 | **Cockpit Buzzer** | `PIN_BUZZER` | **GPIO 25** | Driven by ESP32 LEDC PWM (Channel 0, multi-tone). |
 | **OLED SDA** | `PIN_OLED_SDA` | **GPIO 21** | I2C Data (default ESP32 Wire). 3.3V logic. Address `0x3C`. |
 | **OLED SCL** | `PIN_OLED_SCL` | **GPIO 22** | I2C Clock (default ESP32 Wire). 3.3V logic. 400 kHz fast mode. |
-| **US TRIG (Optional)**| `PIN_US_TRIG` | **GPIO 26** | Output. 10µs trigger pulse for front distance. |
-| **US ECHO (Optional)**| `PIN_US_ECHO` | **GPIO 36** | Input. Requires 5V-to-3.3V resistor divider. |
+| **US TRIG** | `PIN_US_TRIG` | **GPIO 26** | Output. 10µs trigger pulse for front distance. |
+| **US ECHO** | `PIN_US_ECHO` | **GPIO 36** | Input. Reads returned ultrasonic echo pulse. |
 
 #### Forbidden GPIOs:
 - **Do NOT use strapping pins as generic outputs/inputs:**
