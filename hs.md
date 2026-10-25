@@ -6,20 +6,18 @@ This file provides rapid context for working on BlindSpottr.
 
 ## 1. Quick Facts
 
-- **Project**: BlindSpottr (Toy-Truck Blind-Spot Monitoring and Headway Warning System).
+- **Project**: BlindSpottr (Toy-Truck Blind-Spot Monitoring, Headway Sensing, and Live 3D Mobile Telemetry).
 - **Target Microcontroller**: ESP32 DevKit V1 38-Pin (`esp32doit-devkit-v1`).
 - **Framework**: Arduino on PlatformIO (`~/.platformio/penv/bin/pio` or `/opt/homebrew/bin/pio`).
-- **Core Files**:
-  - `include/config.h`: Central hardware pinouts, timing intervals, and buzzer frequencies.
-  - `src/sensors.h / .cpp`: Non-blocking IR sensor debouncing and HC-SR04 ultrasonic distance acquisition.
-  - `src/display.h / .cpp`: SSD1306 128x64 animated graphic HUD (truck view, radar arcs, live cm reading, road markers).
-  - `src/buzzer.h / .cpp`: Hardware LEDC PWM driver on GPIO 25 with directional tone variation.
-  - `src/main.cpp`: Main coordination loop, deterministic FSM, and serial telemetry.
+- **Mobile Stack**: Flutter + Three.js WebGL 3D Canvas (`mobile/`).
+- **Network / Telemetry**:
+  - Wi-Fi SoftAP: `BlindSpottr-AP` (Password: `blindspottr123`, IP: `192.168.4.1`).
+  - WebSocket: `ws://192.168.4.1/ws` streaming JSON at 20 Hz.
 - **Physical Pin Mapping**:
-  - Left IR Digital Out: **GPIO 34** (input-only, active-LOW).
-  - Right IR Digital Out: **GPIO 35** (input-only, active-LOW).
+  - Left IR Digital Out: **GPIO 35** (input-only, active-LOW).
+  - Right IR Digital Out: **GPIO 32** (input-only, active-LOW).
   - Ultrasonic Trigger: **GPIO 26** (3.3V digital output).
-  - Ultrasonic Echo: **GPIO 36 (VP)** (stepped down from 5V via 1kΩ / 2.7kΩ divider).
+  - Ultrasonic Echo: **GPIO 36 (VP)** (12 ms bounded pulse).
   - Ultrasonic VCC: **VIN (5V)**.
   - Buzzer Output: **GPIO 25** (LEDC PWM Channel 0).
   - OLED SDA: **GPIO 21** (I2C data, 3.3V).
@@ -55,4 +53,8 @@ This file provides rapid context for working on BlindSpottr.
 - Monitor serial console:
   ```bash
   pio device monitor --baud 115200
+  ```
+- Run Flutter Mobile App:
+  ```bash
+  cd mobile && flutter run
   ```
