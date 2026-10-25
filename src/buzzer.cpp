@@ -44,9 +44,7 @@ void BuzzerController::update(BsmState state, uint32_t now) {
             toneOn(BUZZER_FREQ_LEFT_HZ);
         } else if (state == BsmState::WARN_RIGHT) {
             toneOn(BUZZER_FREQ_RIGHT_HZ);
-        } else if (state == BsmState::WARN_FRONT) {
-            toneOn(BUZZER_FREQ_FRONT_HZ);
-        } else if (state == BsmState::WARN_BOTH || state == BsmState::WARN_MULTI) {
+        } else if (state == BsmState::WARN_BOTH) {
             toneOn(BUZZER_FREQ_DUAL_HI_HZ);
         }
         return;
@@ -59,8 +57,8 @@ void BuzzerController::update(BsmState state, uint32_t now) {
         return;
     }
 
-    // Pattern 1: DUAL OR MULTI HAZARD (Rapid alternating chirp)
-    if (state == BsmState::WARN_BOTH || state == BsmState::WARN_MULTI) {
+    // Pattern 1: DUAL SIDE HAZARD (Rapid alternating chirp)
+    if (state == BsmState::WARN_BOTH) {
         if (now - _lastToggleMs >= BUZZER_DUAL_CHIRP_MS) {
             _lastToggleMs = now;
             _dualToggle = !_dualToggle;
@@ -73,21 +71,7 @@ void BuzzerController::update(BsmState state, uint32_t now) {
         return;
     }
 
-    // Pattern 2: FRONT HAZARD (Urgent pulsing 1800 Hz)
-    if (state == BsmState::WARN_FRONT) {
-        const uint32_t interval = _isToneActive ? BUZZER_FRONT_ON_MS : BUZZER_FRONT_OFF_MS;
-        if (now - _lastToggleMs >= interval) {
-            _lastToggleMs = now;
-            if (_isToneActive) {
-                toneOff();
-            } else {
-                toneOn(BUZZER_FREQ_FRONT_HZ);
-            }
-        }
-        return;
-    }
-
-    // Pattern 3: SINGLE SIDE HAZARD (Left or Right)
+    // Pattern 2: SINGLE SIDE HAZARD (Left or Right)
     const uint32_t currentInterval = _isToneActive ? BUZZER_SINGLE_ON_MS : BUZZER_SINGLE_OFF_MS;
     if (now - _lastToggleMs >= currentInterval) {
         _lastToggleMs = now;

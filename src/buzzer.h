@@ -2,13 +2,12 @@
 #include <Arduino.h>
 #include "config.h"
 
+// Buzzer alert states strictly reserved for Blind Spot IR monitoring
 enum class BsmState : uint8_t {
     SAFE_CLEAR,
     WARN_LEFT,
     WARN_RIGHT,
-    WARN_FRONT,
-    WARN_BOTH,
-    WARN_MULTI
+    WARN_BOTH
 };
 
 class BuzzerController {

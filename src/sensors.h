@@ -14,7 +14,6 @@ struct SensorData {
     // Front Ultrasonic Sensor
     bool frontValid;
     float frontDistanceCm;
-    bool frontObstacle;
 
     uint32_t lastSampleMs;
     uint32_t lastUsSampleMs;
@@ -38,8 +37,15 @@ private:
     uint8_t _rightDebounced;
     uint32_t _rightDebounceStart;
 
+    // Non-blocking ultrasonic state machine variables
+    enum class UsPhase : uint8_t {
+        IDLE,
+        TRIGGERING,
+        WAITING_ECHO
+    };
+    UsPhase _usPhase;
+    uint32_t _usPhaseTime;
     uint32_t _lastUsTriggerTime;
-    uint8_t _usConsecutiveHits;
     float _recentDistances[3];
     uint8_t _recentDistIndex;
 };
