@@ -6,18 +6,21 @@ This file provides rapid context for working on BlindSpottr.
 
 ## 1. Quick Facts
 
-- **Project**: BlindSpottr (Toy-Truck Blind-Spot Monitoring System).
+- **Project**: BlindSpottr (Toy-Truck Blind-Spot Monitoring and Headway Warning System).
 - **Target Microcontroller**: ESP32 DevKit V1 38-Pin (`esp32doit-devkit-v1`).
 - **Framework**: Arduino on PlatformIO (`~/.platformio/penv/bin/pio` or `/opt/homebrew/bin/pio`).
 - **Core Files**:
   - `include/config.h`: Central hardware pinouts, timing intervals, and buzzer frequencies.
-  - `src/sensors.h / .cpp`: Non-blocking IR sensor acquisition and 15 ms glitch filter.
-  - `src/display.h / .cpp`: SSD1306 128x64 animated graphic HUD (truck view, radar arcs, road markers).
+  - `src/sensors.h / .cpp`: Non-blocking IR sensor debouncing and HC-SR04 ultrasonic distance acquisition.
+  - `src/display.h / .cpp`: SSD1306 128x64 animated graphic HUD (truck view, radar arcs, live cm reading, road markers).
   - `src/buzzer.h / .cpp`: Hardware LEDC PWM driver on GPIO 25 with directional tone variation.
   - `src/main.cpp`: Main coordination loop, deterministic FSM, and serial telemetry.
 - **Physical Pin Mapping**:
   - Left IR Digital Out: **GPIO 34** (input-only, active-LOW).
   - Right IR Digital Out: **GPIO 35** (input-only, active-LOW).
+  - Ultrasonic Trigger: **GPIO 26** (3.3V digital output).
+  - Ultrasonic Echo: **GPIO 36 (VP)** (stepped down from 5V via 1kΩ / 2.7kΩ divider).
+  - Ultrasonic VCC: **VIN (5V)**.
   - Buzzer Output: **GPIO 25** (LEDC PWM Channel 0).
   - OLED SDA: **GPIO 21** (I2C data, 3.3V).
   - OLED SCL: **GPIO 22** (I2C clock, 400 kHz fast mode).

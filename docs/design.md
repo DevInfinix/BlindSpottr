@@ -1,69 +1,107 @@
-# BlindSpottr: Industrial Design and Visual Reference Prompt Library
+# BlindSpottr: Detailed System Design Specification
 
-This document is a prompt library for generative AI image pipelines (such as Midjourney v6, Stable Diffusion XL, FLUX.1, or Imagen 3). Use these prompts alongside user-supplied reference photographs of the scale-model toy truck, perfboard, and electronic modules (ESP32, TCRT5000 IR sensors, SSD1306 OLED, active buzzer) to generate clean, production-grade hardware visualizations of the completed build.
-
----
-
-## 1. Master System Configuration and Design Language
-
-All prompts adhere to this physical specification:
-- **Base Vehicle**: Scale-model industrial flatbed / box toy truck (heavy-duty utilitarian chassis, matte commercial livery, rubber treaded tires, scale 1:16 or 1:18).
-- **Core Electronics Bay**: Custom dark fiberglass FR-4 solder perfboard with green solder mask, clean soldered bus wiring, and gold-plated headers mounted securely onto the flatbed cargo deck.
-- **Microcontroller**: ESP32 DevKit V1 (38-pin black matte PCB, silver micro-USB connector, metallic RF shielding can labeled ESP-WROOM-32, status SMD LEDs).
-- **Driver Cockpit HUD**: 0.96-inch monochrome blue-on-black or white-on-black SSD1306 OLED display mounted on the vehicle cab roof or dashboard, showing an illuminated vector top-down truck graphic with animated radar wave arcs.
-- **Flank Presence Sensors**: Dual TCRT5000 / LM393 infrared optical sensor modules integrated cleanly into the left and right wheel arches or side-skirt panels, angled outward at 90 degrees with precision 3D-printed black ABS bezels.
-- **Acoustic Indicator**: Compact cylindrical black plastic piezo buzzer module mounted flush on the rear cargo bulkboard.
-- **Wiring Harness**: Industrial silicone-insulated 28 AWG wire looms bundled with black braided spiral sleeves and heat-shrink tubing, routed neatly along chassis rail clips rather than loose breadboard jumpers.
+This document details the engineering decisions, state machine semantics, visual HUD design, and acoustic choices implemented in BlindSpottr.
 
 ---
 
-## 2. Realistic 3D Product Renders
+## 1. Design Intent & Problem Statement
 
-### Prompt 1.1: Isometric Three-Quarter Hero Studio Shot (Reference-Guided)
-> **Prompt**: Studio product photography of the finalized BlindSpottr embedded hardware platform integrated onto the scale-model toy truck from the provided reference image. Isometric high three-quarter angle view displaying both the front cab and the right side flank. The truck features a matte-finish utilitarian chassis with the ESP32 microcontroller and custom soldered green FR-4 perfboard seated on the rear flatbed in an aluminum-bracketed mounting tray. Integrated into the right lower side skirt is a black ABS-shrouded TCRT5000 infrared sensor with visible twin optical lenses (clear IR LED and dark phototransistor) aimed directly outward. On top of the truck cab, a 0.96-inch SSD1306 monochrome OLED screen is active, glowing with sharp white vector line graphics depicting a top-down truck wireframe flanked by active curved radar wave arcs. All internal wiring consists of braided black silicone wire sleeves secured neatly along the chassis rails with micro zip-ties. Shot on a neutral grey matte studio workbench surface, softbox key lighting from top-left, gentle rim light highlighting the truck contours, 85mm prime lens, f/8 aperture, ISO 100, 1/125s shutter speed, ultra-crisp depth of field, photorealistic, industrial product design showcase, 8k resolution.
-> **Negative Prompt**: Breadboard, loose jumper wires, rat nest cables, blurred text, plastic flash, fingerprints, scratches, distorted wheels, cartoon, low poly, noisy background, overexposed highlights.
+### 1.1 The Blind-Spot Problem
+Vehicle blind spots present a severe safety risk during lane merges and turns. In miniature vehicle prototypes and educational robotics:
+- Basic obstacle detection code frequently uses `delay()`, which halts execution, starves sensor polling, and freezes screen updates.
+- Standard projects often use simple, single-tone buzzers that produce monotonous buzzing, making it impossible for a driver to distinguish which side is blocked without looking away from the road.
 
-### Prompt 1.2: Direct Overhead Planar Top View (Symmetry & Sensor Layout)
-> **Prompt**: Direct 90-degree orthogonal top-down flat-lay product photograph of the completed BlindSpottr toy truck prototype from the user reference photograph. Perfectly centered overhead perspective illustrating strict bilateral symmetry. On the cab roof, the 128x64 SSD1306 OLED display is brightly illuminated, presenting crisp vector pixel art of the vehicle with animated chevrons and radar detection waves. Protruding subtly from the exact left and right middle flanks are the dual optical IR sensor assemblies, flush-fitted in custom black matte bezels. Across the rear cargo deck, the black ESP32 DevKit V1 board sits mounted on a custom perfboard with neat gold solder points, labeled silkscreen traces, and a small cylindrical black buzzer module. Wire looms are color-coded (red 3.3V, black GND, blue/yellow signal) and bound in spiral wrap, tracing straight geometric paths to the chassis anchor points. Even diffuse overhead ring lighting, shadowless neutral concrete texture backdrop, 50mm macro lens, f/11 aperture for edge-to-edge sharpness, highly detailed technical portfolio photograph, 8k.
-> **Negative Prompt**: Perspective distortion, tilt, angled view, messy wiring, floating components, desaturated screen, glare, blown-out OLED display.
-
-### Prompt 1.3: Low-Angle Dynamic Side Profile (Blind-Spot Sensor Focus)
-> **Prompt**: Low-angle ground-level side elevation macro photograph focusing closely on the vehicle's right side blind-spot sensor pod. The toy truck from the reference photo is parked on a simulated asphalt road surface with crisp white lane markings. Embedded seamlessly into the side step-panel between the front and rear wheels is the optical obstacle sensor board, with precision brass standoffs and an indicator SMD LED softly glowing green to indicate active power. In the background, slightly out of focus, the illuminated cab OLED display and the neatly wire-routed ESP32 flatbed carrier are visible. Studio spotlight angled to cast long cinematic ground shadows, 100mm macro lens, f/4 aperture producing a creamy shallow depth of field on the background while keeping the sensor module tack-sharp, subtle reflections on the chassis lacquer, professional industrial engineering demo capture, 8k UHD.
-> **Negative Prompt**: Loose loose wires, solder splatter, crooked mounting, blurry lens, oversaturation, dust, warped scale.
-
-### Prompt 1.4: Cockpit & Display Macro Close-Up (Interface Telemetry)
-> **Prompt**: Extreme close-up macro studio photograph of the driver cockpit HUD on the model truck. The 0.96-inch SSD1306 monochrome OLED display is the central subject, glowing with high-contrast emissive white pixels against an inky black background. The screen displays the active BlindSpottr telemetry: "BLINDSPOTTR" header, a detailed top-down vehicle icon in the center, animated outward radar warning pulses on the left mirror, and an inverted warning badge reading "[!] L" with "LEFT HAZARD!" along the bottom status bar. Individual OLED pixel grids are subtly visible under close macro inspection. Surrounding the bezel is a textured 3D-printed carbon-fiber-reinforced PETG cowl. Subtle blue ambient fill light, 105mm macro lens, f/5.6 aperture, ISO 100, pin-sharp glass reflection control with polarizing filter, high-tech automotive UI aesthetic.
-> **Negative Prompt**: Low resolution, jagged unreadable text, washed-out LCD backlight glow, moiré patterns, screen glare obscuring text, scratches.
+### 1.2 The BlindSpottr Solution
+BlindSpottr implements a responsive, non-blocking architecture:
+- **Asynchronous 100 Hz Sampling**: Uses `millis()` delta timers to poll presence sensors without holding the CPU.
+- **Directional Sound Design**: Uses hardware PWM to generate distinct musical pitches for Left (2200 Hz) and Right (2900 Hz), along with an alternating warble for Dual hazards.
+- **Animated Top-Down HUD**: Provides immediate visual awareness using a pixel-art truck model flanked by dynamic radar waves and flowing road guidelines.
 
 ---
 
-## 3. Exploded View & Mechanical Assembly
+## 2. Sensor Operation & Electrical Rules
 
-### Prompt 2.1: Isometric Exploded-View Technical Visualization
-> **Prompt**: Clean technical exploded-view assembly rendering of the BlindSpottr system installed on the toy truck chassis based on the provided reference parts. The components are suspended vertically in progressive assembly layers above the lower chassis: at the base, the injection-molded truck frame with motor drive and rubber wheels; middle layer showing the two flank TCRT5000 IR sensor modules with their 3D-printed mounting brackets and captive M2 stainless screws; upper cargo deck showing the custom etched perfboard carrier with female socket headers, the plug-in ESP32 DevKit V1 board, and the cylindrical buzzer; top layer showing the truck cab shell with the cutout housing the 0.96-inch OLED screen and protective acrylic window. Thin, precise cyan guide lines connect screw holes and wire routes between the floating layers. Pure white studio background with soft ambient occlusion ground contact shadows, architectural and industrial CAD rendering style, Keyshot render, octane materials, hyper-realistic metallic and PCB textures, 8k.
-> **Negative Prompt**: Cluttered lines, dark background, realistic dirt, wire tangled, solid opaque blocking, low-poly CAD mesh errors.
-
----
-
-## 4. 2D Technical Schematics, Wireframes & Vector Diagrams
-
-### Prompt 3.1: Clean Engineering Blueprint & Circuit Block Diagram
-> **Prompt**: A crisp 2D CAD engineering schematic and block diagram of the BlindSpottr hardware ecosystem on a classic dark blueprint grid background with fine cyan grid lines and white vector technical lettering. Left side contains clean electrical block symbols: Left IR Module (labeled DO -> GPIO 34, VCC -> 3.3V, GND -> GND) and Right IR Module (DO -> GPIO 35). Center block displays the ESP32 DevKit V1 38-pin chip with every active GPIO pin clearly indexed and highlighted in bright amber text. Right side illustrates the output blocks: SSD1306 OLED Display (SDA -> GPIO 21, SCL -> GPIO 22) and Active Buzzer (SIG -> GPIO 25 via LEDC PWM). Clean orthogonal right-angled bus connection lines with electrical solder dots, component part callouts, dimension annotations, and title block in the bottom right reading "BLINDSPOTTR EMBEDDED ARCHITECTURE - REV 2.0". Crisp vector linework, high contrast, SVG schematic quality, technical publication standard.
-> **Negative Prompt**: Photographic elements, 3D perspective, blurry text, handwriting, watermarks, crossed unlabeled wires.
-
-### Prompt 3.2: 2D Chassis Sensor Coverage & Radar Radiation Cone Diagram
-> **Prompt**: Top-down 2D vector technical diagram illustrating the optical and radar coverage zones surrounding the toy truck chassis. Center contains a simplified minimalist wireframe top-down silhouette of the truck. Extending outward from the left door and right door are wide 90-degree sector cones shaded in translucent gradient amber representing the infrared short-range detection envelopes (calibrated at 2cm to 15cm). Extending forward from the front bumper are concentric dashed cyan radar range rings representing optional ultrasonic headway monitoring. Clean dimension arrow markers indicating scale distances, legend box in top corner detailing "IR Blind Zone (Active-LOW)" and "Safe Operating Corridor". White background with minimalist slate-grey and safety-orange technical vector graphics, crisp typography, automotive engineering safety documentation style.
-> **Negative Prompt**: 3D perspective, photorealistic textures, cluttered noise, illegible labels, pixelation.
+### 2.1 Infrared Reflection Sensors (TCRT5000 / LM393)
+- **Principle**: An infrared emitter diode sends out optical pulses. When an object enters the detection threshold (typically 2 to 15 cm, adjustable via the onboard potentiometer), reflected light triggers a phototransistor, causing the comparator output (DO) to pull LOW.
+- **Active Level**: Active-LOW (`LOW = Object detected`, `HIGH = Zone clear`).
+- **ESP32 Silicon Constraint**: Wired to GPIO 34 (Left) and GPIO 35 (Right). Both pins are input-only (GPI) and lack internal software pull-ups. The module's onboard pull-up resistor provides the default HIGH signal level.
 
 ---
 
-## 5. Guidance for User-Supplied Image Inpainting & Transformation
+## 3. Finite State Machine (FSM)
 
-When supplying your physical reference photos to an image-to-image or inpainting tool:
+The system operates across four primary states resolved on every loop pass:
 
-1. **Reference Photo Input**:
-   - Provide a well-lit photo of your physical truck with the ESP32, perfboard, sensors, and OLED placed in their rough positions.
-2. **Execution Instructions for AI Model**:
-   - *"Preserve the core proportions, wheel placement, and chassis structure of the vehicle in the reference image. Replace all provisional loose jumper wires, breadboards, and temporary tape with custom black braided wire looms, soldered green FR-4 perfboard mounting plates, and flush-mounted black sensor bezels matching Prompt 1.1."*
-3. **Target Aesthetic**:
-   - Convert provisional prototyping artifacts into a finished, bench-tested industrial prototype ready for exhibition.
+```mermaid
+stateDiagram-v2
+    [*] --> SAFE_CLEAR
+
+    SAFE_CLEAR --> WARN_LEFT : Left Sensor Triggered
+    SAFE_CLEAR --> WARN_RIGHT : Right Sensor Triggered
+    SAFE_CLEAR --> WARN_BOTH : Both Sensors Triggered
+
+    WARN_LEFT --> SAFE_CLEAR : Left Sensor Cleared
+    WARN_LEFT --> WARN_BOTH : Right Sensor Triggered
+
+    WARN_RIGHT --> SAFE_CLEAR : Right Sensor Cleared
+    WARN_RIGHT --> WARN_BOTH : Left Sensor Triggered
+
+    WARN_BOTH --> WARN_LEFT : Right Sensor Cleared
+    WARN_BOTH --> WARN_RIGHT : Left Sensor Cleared
+    WARN_BOTH --> SAFE_CLEAR : Both Sensors Cleared
+```
+
+### State Definitions:
+1. **`BsmState::SAFE_CLEAR`**:
+   - Both sensors read clear (`HIGH`).
+   - Buzzer: completely silent (0 Hz).
+   - Display: road guidelines stream backward past the truck; bottom banner displays `>>> ROAD CLEAR <<<`.
+2. **`BsmState::WARN_LEFT`**:
+   - Left sensor detects an obstacle; Right sensor is clear.
+   - Buzzer: 2200 Hz tone pulsed at 100 ms ON / 120 ms OFF.
+   - Display: animated radar arcs emit left; inverted `[!] L` badge illuminates; header chevrons sweep left; bottom banner displays `<< LEFT HAZARD! <<`.
+3. **`BsmState::WARN_RIGHT`**:
+   - Right sensor detects an obstacle; Left sensor is clear.
+   - Buzzer: 2900 Hz tone pulsed at 100 ms ON / 120 ms OFF.
+   - Display: animated radar arcs emit right; inverted `[!] R` badge illuminates; header chevrons sweep right; bottom banner displays `>> RIGHT HAZARD! >>`.
+4. **`BsmState::WARN_BOTH`**:
+   - Both sensors detect obstacles simultaneously.
+   - Buzzer: rapid two-tone warble alarm switching between 3400 Hz and 2400 Hz every 50 ms.
+   - Display: radar arcs pulse on both sides; flashing alternating banner displays `!! DUAL SIDE WARN !!`.
+
+---
+
+## 4. Acoustic Pitch and Cadence Engineering
+
+Using the ESP32 LEDC PWM controller on GPIO 25, the buzzer driver produces clean square waves without CPU overhead:
+
+| State | Pitch (Hz) | Duration On | Duration Off | Rationale |
+| :--- | :---: | :---: | :---: | :--- |
+| **Clear** | 0 Hz | 0 ms | Indefinite | Cockpit silence during safe conditions. |
+| **Left Hazard** | 2200 Hz | 100 ms | 120 ms | Steady mid-pitch tone easily associated with the left side. |
+| **Right Hazard** | 2900 Hz | 100 ms | 120 ms | Sharper, higher frequency tone easily distinguished from the left. |
+| **Dual Hazard** | 3400 / 2400 Hz | 50 ms | 50 ms | High-urgency alternating chirp signaling high priority. |
+
+---
+
+## 5. Visual HUD Layout (SSD1306 OLED)
+
+The screen is updated every 60 ms (~16 FPS) over I2C at 400 kHz.
+
+```text
+0-----------------------------------------------------127
+| <<<           B L I N D S P O T T R               >>> | (Y: 0-9)
+|-------------------------------------------------------|
+|               [== Front Scanner ==]                   | (Y: 10-14)
+|  [!]L       .-----.  [====]  .-----.            [!]R  | (Y: 14-46)
+|  ((((       |     |  |    |  |     |            ))))  |
+|             '-----'  |____|  '-----'                  |
+|                        ||                             |
+|                      [====]                           |
+|-------------------------------------------------------|
+|               << LEFT HAZARD DETECTED <<              | (Y: 50-63)
++-------------------------------------------------------+
+```
+
+- **Top-Down Perspective**: Mirrors the driver's perspective from above the vehicle.
+- **Fail-Safe Operation**: If the display is disconnected, the 50 ms I2C timeout allows the ESP32 to drop the frame without blocking sensor reads or audio alerts.

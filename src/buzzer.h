@@ -6,7 +6,9 @@ enum class BsmState : uint8_t {
     SAFE_CLEAR,
     WARN_LEFT,
     WARN_RIGHT,
-    WARN_BOTH
+    WARN_FRONT,
+    WARN_BOTH,
+    WARN_MULTI
 };
 
 class BuzzerController {
