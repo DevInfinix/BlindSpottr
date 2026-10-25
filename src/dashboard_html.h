@@ -13,12 +13,11 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body, html { width: 100%; height: 100%; overflow: hidden; background: #07090e; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     #canvas { width: 100%; height: 100%; display: block; position: absolute; top: 0; left: 0; z-index: 1; }
-    #overlay-hud { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; padding: 16px; }
+    #overlay-hud { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; padding: 14px; }
     .hud-top { display: flex; justify-content: space-between; align-items: center; }
-    .status-badge { background: rgba(18, 22, 31, 0.85); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 20px; padding: 7px 14px; color: #fff; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+    .status-badge { pointer-events: auto; background: rgba(18, 22, 31, 0.85); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 20px; padding: 7px 14px; color: #fff; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; cursor: pointer; }
     .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #00e676; box-shadow: 0 0 8px #00e676; }
     .status-dot.danger { background: #ff1744; box-shadow: 0 0 10px #ff1744; }
-    .status-dot.warning { background: #ffea00; box-shadow: 0 0 10px #ffea00; }
     .status-dot.connecting { background: #38bdf8; box-shadow: 0 0 10px #38bdf8; }
     .hud-center { text-align: center; }
     .distance-badge { display: inline-block; background: rgba(10, 14, 22, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(0, 230, 118, 0.4); border-radius: 12px; padding: 8px 18px; color: #00e676; font-size: 19px; font-weight: 700; letter-spacing: 0.5px; transition: all 0.3s ease; }
@@ -28,18 +27,29 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
     .hud-bottom { display: flex; justify-content: space-between; align-items: flex-end; }
     .telemetry-card { background: rgba(18, 22, 31, 0.85); backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 10px 14px; color: #a0aec0; font-size: 11px; }
     .telemetry-card b { color: #fff; font-size: 13px; }
+
+    /* Interactive Settings Modal */
+    #settings-modal { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; background: rgba(0,0,0,0.8); backdrop-filter: blur(12px); padding: 20px; align-items: center; justify-content: center; }
+    .modal-card { background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 16px; width: 100%; max-width: 380px; padding: 20px; color: #fff; }
+    .modal-card h2 { font-size: 18px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }
+    .modal-card label { display: block; font-size: 12px; color: #94a3b8; margin-top: 12px; margin-bottom: 6px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px; }
+    .modal-card input[type=text], .modal-card input[type=password] { width: 100%; padding: 10px 12px; background: #1e293b; border: 1px solid #334155; border-radius: 8px; color: #fff; font-size: 14px; outline: none; }
+    .modal-card input[type=range] { width: 100%; accent-color: #38bdf8; margin: 8px 0; }
+    .btn-save { width: 100%; padding: 12px; background: #0284c7; border: none; border-radius: 10px; color: #fff; font-weight: 700; margin-top: 18px; cursor: pointer; }
+    .btn-close { background: none; border: none; color: #94a3b8; font-size: 20px; cursor: pointer; }
   </style>
 </head>
 <body>
   <canvas id="canvas"></canvas>
+
   <div id="overlay-hud">
     <div class="hud-top">
-      <div class="status-badge">
+      <div class="status-badge" onclick="toggleSettings()">
         <div id="status-dot" class="status-dot connecting"></div>
         <span id="state-text">CONNECTING...</span>
       </div>
-      <div class="status-badge">
-        <span id="ip-text">BlindSpottr Live</span>
+      <div class="status-badge" onclick="toggleSettings()">
+        <span>⚙️ Settings</span>
       </div>
     </div>
     <div class="hud-center">
@@ -48,6 +58,24 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
     <div class="hud-bottom">
       <div class="telemetry-card">LEFT BLIND SPOT: <b id="left-text">CLEAR</b></div>
       <div class="telemetry-card">RIGHT BLIND SPOT: <b id="right-text">CLEAR</b></div>
+    </div>
+  </div>
+
+  <!-- Settings Modal (Captive Portal & Sensor Tuning) -->
+  <div id="settings-modal">
+    <div class="modal-card">
+      <h2><span>⚙️ Vehicle Settings</span><button class="btn-close" onclick="toggleSettings()">✕</button></h2>
+      
+      <label>Headway Warning Threshold: <span id="thresh-val" style="color:#38bdf8; font-weight:bold;">20 cm</span></label>
+      <input type="range" id="thresh-slider" min="10" max="60" value="20" oninput="document.getElementById('thresh-val').innerText = this.value + ' cm'">
+
+      <label>Connect to Phone Hotspot (SSID):</label>
+      <input type="text" id="cfg-ssid" placeholder="e.g. My-iPhone">
+
+      <label>Hotspot Password:</label>
+      <input type="password" id="cfg-pass" placeholder="Password">
+
+      <button class="btn-save" onclick="saveWifiConfig()">Save & Connect Truck</button>
     </div>
   </div>
 
@@ -71,6 +99,29 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
       state: "CLEAR"
     };
 
+    function toggleSettings() {
+      const modal = document.getElementById('settings-modal');
+      modal.style.display = (modal.style.display === 'flex') ? 'none' : 'flex';
+    }
+
+    function saveWifiConfig() {
+      const ssid = document.getElementById('cfg-ssid').value;
+      const pass = document.getElementById('cfg-pass').value;
+      if (!ssid) return alert("Please enter your hotspot name!");
+
+      const body = new URLSearchParams();
+      body.append('ssid', ssid);
+      body.append('pass', pass);
+
+      fetch('/api/wifi', { method: 'POST', body: body })
+        .then(r => r.json())
+        .then(res => {
+          alert("Credentials saved! ESP32 is now connecting to: " + ssid);
+          toggleSettings();
+        })
+        .catch(e => alert("Saved! ESP32 will auto-connect to hotspot."));
+    }
+
     function updateTelemetryUI(data) {
       currentData = data;
       document.getElementById('left-text').innerText = data.left ? "HAZARD" : "CLEAR";
@@ -88,7 +139,7 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
           distCard.className = "distance-badge danger";
           dot.className = "status-dot danger";
           stateText.innerText = "COLLISION ALERT";
-        } else if (data.front_cm < 40) {
+        } else if (data.front_cm < 45) {
           distCard.className = "distance-badge warning";
           dot.className = "status-dot warning";
           stateText.innerText = "CAUTION DISTANCE";
@@ -117,7 +168,6 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
       ws.onopen = () => {
         document.getElementById('status-dot').className = "status-dot";
         document.getElementById('state-text').innerText = "LIVE PERCEPTION";
-        document.getElementById('ip-text').innerText = wsHost;
       };
 
       ws.onmessage = (event) => {
@@ -139,7 +189,6 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
     }
     connectWS();
 
-    // Perspective Projection helper
     let roadOffset = 0;
     let targetObstacleZ = 200;
     let curObstacleZ = 200;
@@ -152,7 +201,6 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
       const vpX = w / 2;
       const vpY = h * 0.38;
 
-      // Draw Grid / Ground
       ctx.fillStyle = '#07090e';
       ctx.fillRect(0, 0, w, h);
 
@@ -230,26 +278,26 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
       ctx.save();
       ctx.translate(truckX, truckY);
 
-      // Radar Waves on Left
+      // Radar Waves on Left (Viewer Right)
       if (currentData.left) {
         const pulse = (Math.sin(time * 0.01) + 1) * 0.5;
         ctx.strokeStyle = `rgba(255, 23, 68, ${0.4 + 0.5 * pulse})`;
         ctx.lineWidth = 3;
         for (let i = 1; i <= 3; i++) {
           ctx.beginPath();
-          ctx.arc(-tw/2 - 10, -th * 0.2, 18 * i + pulse * 8, Math.PI * 0.6, Math.PI * 1.4);
+          ctx.arc(tw/2 + 10, -th * 0.2, 18 * i + pulse * 8, -Math.PI * 0.4, Math.PI * 0.4);
           ctx.stroke();
         }
       }
 
-      // Radar Waves on Right
+      // Radar Waves on Right (Viewer Left)
       if (currentData.right) {
         const pulse = (Math.sin(time * 0.01) + 1) * 0.5;
         ctx.strokeStyle = `rgba(255, 23, 68, ${0.4 + 0.5 * pulse})`;
         ctx.lineWidth = 3;
         for (let i = 1; i <= 3; i++) {
           ctx.beginPath();
-          ctx.arc(tw/2 + 10, -th * 0.2, 18 * i + pulse * 8, -Math.PI * 0.4, Math.PI * 0.4);
+          ctx.arc(-tw/2 - 10, -th * 0.2, 18 * i + pulse * 8, Math.PI * 0.6, Math.PI * 1.4);
           ctx.stroke();
         }
       }
