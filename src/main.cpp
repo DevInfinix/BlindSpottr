@@ -12,21 +12,17 @@ static BuzzerController buzzer;
 static BsmState currentState = BsmState::SAFE_CLEAR;
 static uint32_t lastDiagnosticsMs = 0;
 
+/**
+ * @brief Deterministic FSM: Evaluates state solely based on Blind-Spot IR inputs.
+ *        Ultrasonic distance is telemetry/telemetry-display only, not triggering buzzer.
+ */
 static BsmState evaluateState(const SensorData& data) {
-    const bool sideBoth = (data.leftObstacle && data.rightObstacle);
-    const bool front = (data.frontValid && data.frontObstacle);
-
-    // Front hazard combined with side obstacles creates multi-hazard
-    if (front && (data.leftObstacle || data.rightObstacle)) {
-        return BsmState::WARN_MULTI;
-    } else if (sideBoth) {
+    if (data.leftObstacle && data.rightObstacle) {
         return BsmState::WARN_BOTH;
     } else if (data.leftObstacle) {
         return BsmState::WARN_LEFT;
     } else if (data.rightObstacle) {
         return BsmState::WARN_RIGHT;
-    } else if (front) {
-        return BsmState::WARN_FRONT;
     }
     return BsmState::SAFE_CLEAR;
 }
@@ -38,26 +34,23 @@ static void printDiagnostics(const SensorData& data, BsmState state, uint32_t no
     lastDiagnosticsMs = now;
 
     Serial.print(F("LEFT (P35)="));
-    Serial.print(data.leftObstacle ? F("OBJ") : F("CLR"));
+    Serial.print(data.leftObstacle ? F("OBJECT") : F("CLEAR"));
     Serial.print(F(" | RIGHT (P32)="));
-    Serial.print(data.rightObstacle ? F("OBJ") : F("CLR"));
-    Serial.print(F(" | FRONT="));
+    Serial.print(data.rightObstacle ? F("OBJECT") : F("CLEAR"));
+    Serial.print(F(" | US_DIST="));
     if (data.frontValid) {
         Serial.print((int)data.frontDistanceCm);
-        Serial.print(F("cm"));
-        if (data.frontObstacle) Serial.print(F(" [WARN]"));
+        Serial.print(F(" cm"));
     } else {
         Serial.print(F("---"));
     }
-    Serial.print(F(" | STATE="));
+    Serial.print(F(" | BUZZER="));
 
     switch (state) {
-        case BsmState::SAFE_CLEAR: Serial.println(F("ROAD_CLEAR")); break;
-        case BsmState::WARN_LEFT:  Serial.println(F("LEFT_HAZARD (2200Hz)")); break;
-        case BsmState::WARN_RIGHT: Serial.println(F("RIGHT_HAZARD (2900Hz)")); break;
-        case BsmState::WARN_FRONT: Serial.println(F("FRONT_HAZARD (1800Hz)")); break;
-        case BsmState::WARN_BOTH:  Serial.println(F("DUAL_HAZARD (Warble)")); break;
-        case BsmState::WARN_MULTI: Serial.println(F("MULTI_HAZARD (Warble)")); break;
+        case BsmState::SAFE_CLEAR: Serial.println(F("SILENT (Clear)")); break;
+        case BsmState::WARN_LEFT:  Serial.println(F("2200Hz Beep (Left Hazard)")); break;
+        case BsmState::WARN_RIGHT: Serial.println(F("2900Hz Beep (Right Hazard)")); break;
+        case BsmState::WARN_BOTH:  Serial.println(F("3400/2400Hz Chirp (Dual Hazard)")); break;
     }
 }
 
@@ -67,22 +60,20 @@ void setup() {
 
     Serial.println();
     Serial.println(F("=================================================="));
-    Serial.println(F("  BLINDSPOTTR — TOY TRUCK BSM FIRMWARE v2.3"));
+    Serial.println(F("  BLINDSPOTTR — TOY TRUCK BSM FIRMWARE v2.4"));
     Serial.println(F("=================================================="));
-    Serial.println(F("[CONFIG] Left IR = GPIO 35, Right IR = GPIO 32"));
-    Serial.println(F("[CONFIG] Ultrasonic TRIG = GPIO 26, ECHO = GPIO 36"));
 
-    // 1. Initialize Buzzer Controller on GPIO 25 with tone generation
+    // 1. Initialize Buzzer Controller and ensure silence
     buzzer.begin();
     buzzer.silence();
 
     // 2. Initialize IR sensors and Ultrasonic
     sensors.begin();
 
-    // 3. Initialize OLED Display on GPIO 21 & 22 with Graphical Dashboard
+    // 3. Initialize OLED Display
     display.begin();
 
-    Serial.println(F("[INFO] System online. Dashboard, ultrasonic & audio alerts active."));
+    Serial.println(F("[INFO] System online. Clean IR buzzer alerts & non-blocking US active."));
 }
 
 void loop() {
@@ -92,10 +83,10 @@ void loop() {
     sensors.update(now);
     const SensorData& data = sensors.getData();
 
-    // 2. Deterministic FSM State Resolution
+    // 2. Deterministic FSM State Resolution (Strictly IR blind spot warnings)
     currentState = evaluateState(data);
 
-    // 3. Audio Alert Engine with Tone Variations
+    // 3. Audio Alert Engine (Beeps ONLY for left/right/both IR hazards)
     buzzer.update(currentState, now);
 
     // 4. Graphical OLED Dashboard Rendering

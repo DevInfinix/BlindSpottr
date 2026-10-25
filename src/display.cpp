@@ -30,7 +30,7 @@ bool DisplayController::begin() {
     _display.setCursor(26, 45);
     _display.println(F("SYSTEM READY"));
     _display.display();
-    delay(250);
+    delay(200);
 
     return true;
 }
@@ -79,38 +79,12 @@ void DisplayController::drawBlindSpotWaves(bool leftHazard, bool rightHazard, ui
     const int cx = 64;
     const int cy = 29;
 
-    // LEFT ZONE (Physically on the LEFT side of the display: x < cx)
+    // From overhead perspective:
+    // Left IR hazard (data.leftObstacle) is drawn on Screen RIGHT (x > cx) with 'L' label
+    // Right IR hazard (data.rightObstacle) is drawn on Screen LEFT (x < cx) with 'R' label
+
+    // SCREEN RIGHT SIDE (Displays Left IR hazard with 'L' badge):
     if (leftHazard) {
-        // Multi-tier animated radar pulse expanding to the LEFT
-        const int waveStep = (animTick % 4);
-        for (int w = 0; w <= waveStep; w++) {
-            const int radius = 8 + (w * 5);
-            const int startX = cx - 12 - radius;
-            if (startX >= 20) {
-                _display.drawFastVLine(startX, cy - radius / 2, radius, SSD1306_WHITE);
-            }
-        }
-        _display.fillTriangle(cx - 16, cy, cx - 22, cy - 6, cx - 22, cy + 6, SSD1306_WHITE);
-
-        // Inverted Left Alert Badge explicitly labeled "L"
-        _display.fillRoundRect(2, 14, 16, 32, 2, SSD1306_WHITE);
-        _display.setTextColor(SSD1306_BLACK, SSD1306_WHITE);
-        _display.setCursor(6, 20);
-        _display.println(F("!"));
-        _display.setCursor(6, 32);
-        _display.println(F("L"));
-        _display.setTextColor(SSD1306_WHITE);
-    } else {
-        // Clear: animated road line markers flowing backwards (forward motion illusion)
-        const int dashOffset = (animTick % 8);
-        for (int y = 12 + dashOffset; y < 48; y += 8) {
-            _display.drawPixel(cx - 20, y, SSD1306_WHITE);
-        }
-    }
-
-    // RIGHT ZONE (Physically on the RIGHT side of the display: x > cx)
-    if (rightHazard) {
-        // Multi-tier animated radar pulse expanding to the RIGHT
         const int waveStep = (animTick % 4);
         for (int w = 0; w <= waveStep; w++) {
             const int radius = 8 + (w * 5);
@@ -121,19 +95,43 @@ void DisplayController::drawBlindSpotWaves(bool leftHazard, bool rightHazard, ui
         }
         _display.fillTriangle(cx + 16, cy, cx + 22, cy - 6, cx + 22, cy + 6, SSD1306_WHITE);
 
-        // Inverted Right Alert Badge explicitly labeled "R"
         _display.fillRoundRect(110, 14, 16, 32, 2, SSD1306_WHITE);
         _display.setTextColor(SSD1306_BLACK, SSD1306_WHITE);
         _display.setCursor(115, 20);
         _display.println(F("!"));
         _display.setCursor(115, 32);
-        _display.println(F("R"));
+        _display.println(F("L"));
         _display.setTextColor(SSD1306_WHITE);
     } else {
-        // Clear: animated road line markers flowing backwards
         const int dashOffset = (animTick % 8);
         for (int y = 12 + dashOffset; y < 48; y += 8) {
             _display.drawPixel(cx + 20, y, SSD1306_WHITE);
+        }
+    }
+
+    // SCREEN LEFT SIDE (Displays Right IR hazard with 'R' badge):
+    if (rightHazard) {
+        const int waveStep = (animTick % 4);
+        for (int w = 0; w <= waveStep; w++) {
+            const int radius = 8 + (w * 5);
+            const int startX = cx - 12 - radius;
+            if (startX >= 20) {
+                _display.drawFastVLine(startX, cy - radius / 2, radius, SSD1306_WHITE);
+            }
+        }
+        _display.fillTriangle(cx - 16, cy, cx - 22, cy - 6, cx - 22, cy + 6, SSD1306_WHITE);
+
+        _display.fillRoundRect(2, 14, 16, 32, 2, SSD1306_WHITE);
+        _display.setTextColor(SSD1306_BLACK, SSD1306_WHITE);
+        _display.setCursor(6, 20);
+        _display.println(F("!"));
+        _display.setCursor(6, 32);
+        _display.println(F("R"));
+        _display.setTextColor(SSD1306_WHITE);
+    } else {
+        const int dashOffset = (animTick % 8);
+        for (int y = 12 + dashOffset; y < 48; y += 8) {
+            _display.drawPixel(cx - 20, y, SSD1306_WHITE);
         }
     }
 }
@@ -141,20 +139,22 @@ void DisplayController::drawBlindSpotWaves(bool leftHazard, bool rightHazard, ui
 void DisplayController::drawWarningChevrons(bool leftHazard, bool rightHazard, uint8_t animTick) {
     const int step = animTick % 6;
 
+    // Flip chevron directions to match overhead line of sight:
     if (leftHazard && !rightHazard) {
-        for (int i = 0; i < 3; i++) {
-            const int x = 32 - (i * 8) - step;
-            if (x > 4) {
-                _display.drawLine(x + 4, 1, x, 4, SSD1306_WHITE);
-                _display.drawLine(x, 4, x + 4, 7, SSD1306_WHITE);
-            }
-        }
-    } else if (rightHazard && !leftHazard) {
+        // Point toward the side where 'L' is displayed
         for (int i = 0; i < 3; i++) {
             const int x = 96 + (i * 8) + step;
             if (x < 124) {
                 _display.drawLine(x, 1, x + 4, 4, SSD1306_WHITE);
                 _display.drawLine(x + 4, 4, x, 7, SSD1306_WHITE);
+            }
+        }
+    } else if (rightHazard && !leftHazard) {
+        for (int i = 0; i < 3; i++) {
+            const int x = 32 - (i * 8) - step;
+            if (x > 4) {
+                _display.drawLine(x + 4, 1, x, 4, SSD1306_WHITE);
+                _display.drawLine(x, 4, x + 4, 7, SSD1306_WHITE);
             }
         }
     }
@@ -177,16 +177,16 @@ void DisplayController::renderDashboard(const SensorData& data, BsmState state, 
     const int cx = 64;
     const int cy = 29;
 
-    if (data.frontValid) {
+    if (data.frontValid && data.frontDistanceCm > 0) {
         // Render live distance readout centered above the truck cab
         _display.setCursor(cx - 16, 11);
         _display.print((int)data.frontDistanceCm);
         _display.print(F("cm"));
 
-        if (data.frontObstacle) {
-            // Flashing proximity warning bar right in front of bumper
-            _display.fillRect(cx - 10, cy - 18, 20, 2, SSD1306_WHITE);
-        }
+        // Visual proximity bar: length scales with distance
+        int barWidth = map((int)data.frontDistanceCm, 5, 100, 4, 28);
+        barWidth = constrain(barWidth, 4, 28);
+        _display.drawRect(cx - (barWidth / 2), cy - 18, barWidth, 2, SSD1306_WHITE);
     } else {
         // Continuous sweeping radar beam emitting ahead of the truck
         const int frontTick = (_animPhase % 5);
@@ -199,7 +199,6 @@ void DisplayController::renderDashboard(const SensorData& data, BsmState state, 
     }
 
     // 3. CENTER GRAPHIC: TOY TRUCK & BLIND SPOT ZONES
-    // Clean, direct 1:1 mapping: data.leftObstacle draws on left with 'L', data.rightObstacle on right with 'R'
     drawTruckChassis(cx, cy);
     drawBlindSpotWaves(data.leftObstacle, data.rightObstacle, _animPhase);
 
@@ -219,12 +218,7 @@ void DisplayController::renderDashboard(const SensorData& data, BsmState state, 
         _display.setTextColor(SSD1306_BLACK, SSD1306_WHITE);
         _display.setCursor(12, 54);
         _display.print(F(">> RIGHT HAZARD! >>"));
-    } else if (state == BsmState::WARN_FRONT) {
-        _display.fillRect(0, 52, 128, 12, SSD1306_WHITE);
-        _display.setTextColor(SSD1306_BLACK, SSD1306_WHITE);
-        _display.setCursor(10, 54);
-        _display.print(F("^^ FRONT HAZARD! ^^"));
-    } else if (state == BsmState::WARN_BOTH || state == BsmState::WARN_MULTI) {
+    } else if (state == BsmState::WARN_BOTH) {
         const bool invert = ((now / 150) % 2 == 0);
         if (invert) {
             _display.fillRect(0, 52, 128, 12, SSD1306_WHITE);
