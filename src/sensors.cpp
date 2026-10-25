@@ -6,7 +6,10 @@ SensorManager::SensorManager()
       _leftDebounceStart(0),
       _rightDebounced(HIGH),
       _rightDebounceStart(0),
-      _lastUsTriggerTime(0) {
+      _lastUsTriggerTime(0),
+      _usConsecutiveHits(0),
+      _recentDistances{-1.0f, -1.0f, -1.0f},
+      _recentDistIndex(0) {
     _data.leftRaw = HIGH;
     _data.leftObstacle = false;
     _data.rightRaw = HIGH;
@@ -19,9 +22,9 @@ SensorManager::SensorManager()
 }
 
 void SensorManager::begin() {
-    // 1. Configure IR pins (GPIO 34 and 35 are input-only GPI)
+    // 1. Configure IR pins
     pinMode(PIN_IR_LEFT, INPUT);
-    pinMode(PIN_IR_RIGHT, INPUT);
+    pinMode(PIN_IR_RIGHT, INPUT_PULLUP); // GPIO 32 supports internal pullup
 
     _data.leftRaw = digitalRead(PIN_IR_LEFT);
     _leftDebounced = _data.leftRaw;
@@ -52,7 +55,7 @@ void SensorManager::sampleIrSensors(uint32_t now) {
     }
     _data.lastSampleMs = now;
 
-    // 1. Left IR Sensor
+    // 1. Left IR Sensor (GPIO 35)
     const uint8_t rawL = digitalRead(PIN_IR_LEFT);
     _data.leftRaw = rawL;
     if (rawL != _leftDebounced) {
@@ -67,7 +70,7 @@ void SensorManager::sampleIrSensors(uint32_t now) {
     }
     _data.leftObstacle = (_leftDebounced == IR_LEFT_ACTIVE_LEVEL);
 
-    // 2. Right IR Sensor
+    // 2. Right IR Sensor (GPIO 32)
     const uint8_t rawR = digitalRead(PIN_IR_RIGHT);
     _data.rightRaw = rawR;
     if (rawR != _rightDebounced) {
@@ -90,39 +93,68 @@ void SensorManager::sampleUltrasonic(uint32_t now) {
     _lastUsTriggerTime = now;
     _data.lastUsSampleMs = now;
 
-    // Guard against floating/stuck HIGH line
+    // Guard against floating or stuck HIGH echo line
     if (digitalRead(PIN_US_ECHO) == HIGH) {
         _data.frontValid = false;
         _data.frontDistanceCm = -1.0f;
         _data.frontObstacle = false;
+        _usConsecutiveHits = 0;
         return;
     }
 
-    // Send 10µs trigger pulse
+    // Emit 10µs trigger pulse
     digitalWrite(PIN_US_TRIG, LOW);
-    delayMicroseconds(2);
+    delayMicroseconds(4);
     digitalWrite(PIN_US_TRIG, HIGH);
     delayMicroseconds(10);
     digitalWrite(PIN_US_TRIG, LOW);
 
-    // Measure echo pulse with bounded timeout
+    // Read echo duration with bounded timeout (18 ms = ~300 cm)
     const unsigned long durationUs = pulseIn(PIN_US_ECHO, HIGH, US_ECHO_TIMEOUT_US);
 
-    if (durationUs == 0) {
+    float measuredCm = -1.0f;
+    bool validMeasurement = false;
+
+    // Filter out 0 (timeout) and unrealistic ultra-short transients (< 120µs = < 2cm)
+    if (durationUs >= 120 && durationUs <= US_ECHO_TIMEOUT_US) {
+        float rawCm = durationUs * 0.01715f;
+        if (rawCm >= US_MIN_PLAUSIBLE_CM && rawCm <= US_MAX_PLAUSIBLE_CM) {
+            measuredCm = rawCm;
+            validMeasurement = true;
+        }
+    }
+
+    if (validMeasurement) {
+        _recentDistances[_recentDistIndex] = measuredCm;
+        _recentDistIndex = (_recentDistIndex + 1) % 3;
+
+        // Running median filter of last 3 samples to eliminate single-sample spikes
+        float sorted[3];
+        for (int i = 0; i < 3; i++) sorted[i] = _recentDistances[i];
+        if (sorted[0] > sorted[1]) { float t = sorted[0]; sorted[0] = sorted[1]; sorted[1] = t; }
+        if (sorted[1] > sorted[2]) { float t = sorted[1]; sorted[1] = sorted[2]; sorted[2] = t; }
+        if (sorted[0] > sorted[1]) { float t = sorted[0]; sorted[0] = sorted[1]; sorted[1] = t; }
+
+        const float medianDist = (sorted[1] > 0) ? sorted[1] : measuredCm;
+
+        _data.frontValid = true;
+        _data.frontDistanceCm = medianDist;
+
+        // Require 2 consecutive close readings before raising front hazard alarm
+        if (medianDist <= FRONT_HAZARD_THRESHOLD_CM) {
+            if (_usConsecutiveHits < 2) {
+                _usConsecutiveHits++;
+            }
+        } else {
+            _usConsecutiveHits = 0;
+        }
+        _data.frontObstacle = (_usConsecutiveHits >= 2);
+    } else {
+        // Measurement timed out or no echo
         _data.frontValid = false;
         _data.frontDistanceCm = -1.0f;
         _data.frontObstacle = false;
-    } else {
-        const float distanceCm = static_cast<float>(durationUs) * 0.01715f;
-        if (distanceCm >= US_MIN_PLAUSIBLE_CM && distanceCm <= US_MAX_PLAUSIBLE_CM) {
-            _data.frontValid = true;
-            _data.frontDistanceCm = distanceCm;
-            _data.frontObstacle = (distanceCm <= FRONT_HAZARD_THRESHOLD_CM);
-        } else {
-            _data.frontValid = false;
-            _data.frontDistanceCm = -1.0f;
-            _data.frontObstacle = false;
-        }
+        _usConsecutiveHits = 0;
     }
 }
 
