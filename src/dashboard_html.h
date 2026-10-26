@@ -1,107 +1,113 @@
 #pragma once
 #include <Arduino.h>
 
-// High-performance immersive Tesla-style perception HUD (Canvas rendering + interactive telemetry)
+// Production-grade Tesla Cockpit UI: Monotone grayscale (Black, Slate Gray, Pure White, Alert Red)
+// High-DPI Perspective Canvas + Interactive HUD + Dynamic Headway Proxy + Settings Modal
 const char INDEX_HTML[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>BlindSpottr FSD Perception HUD</title>
+  <title>BlindSpottr FSD Cockpit</title>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body, html { width: 100%; height: 100%; overflow: hidden; background: #07090e; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body, html { width: 100%; height: 100%; overflow: hidden; background: #0b0c10; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #f1f5f9; }
     #canvas { width: 100%; height: 100%; display: block; position: absolute; top: 0; left: 0; z-index: 1; }
-    #overlay-hud { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; padding: 16px; }
+    #overlay-hud { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; padding: 18px 20px; }
     
-    /* Top Status Bar */
+    /* Top Bar: Tesla Instrument Cluster */
     .hud-top { display: flex; justify-content: space-between; align-items: center; }
-    .status-badge { pointer-events: auto; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 24px; padding: 7px 16px; color: #fff; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; cursor: pointer; transition: all 0.2s; }
-    .status-badge:hover { background: rgba(30, 41, 59, 0.95); border-color: rgba(56, 189, 248, 0.4); }
-    .status-dot { width: 9px; height: 9px; border-radius: 50%; background: #00e676; box-shadow: 0 0 10px #00e676; }
-    .status-dot.danger { background: #ff1744; box-shadow: 0 0 12px #ff1744; }
-    .status-dot.connecting { background: #38bdf8; box-shadow: 0 0 10px #38bdf8; }
+    .status-pill { pointer-events: auto; background: rgba(18, 18, 22, 0.88); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 28px; padding: 7px 16px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 9px; cursor: pointer; transition: all 0.25s ease; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5); }
+    .status-pill:hover { background: rgba(30, 30, 36, 0.95); border-color: rgba(255, 255, 255, 0.25); }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #ffffff; box-shadow: 0 0 10px rgba(255, 255, 255, 0.9); }
+    .status-dot.danger { background: #ef4444; box-shadow: 0 0 14px #ef4444; }
+    .status-dot.connecting { background: #94a3b8; box-shadow: 0 0 8px #94a3b8; }
     
-    /* Speedometer & Gear Indicator (Tesla aesthetic) */
-    .speedo-cluster { pointer-events: auto; background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 16px; padding: 8px 16px; display: flex; align-items: center; gap: 14px; }
-    .gear-pills { display: flex; gap: 6px; font-size: 11px; font-weight: 800; color: #64748b; }
-    .gear-pills span.active { color: #38bdf8; text-shadow: 0 0 8px rgba(56, 189, 248, 0.6); }
-    .speed-display { font-size: 26px; font-weight: 800; color: #fff; line-height: 1; letter-spacing: -0.5px; }
-    .speed-unit { font-size: 10px; color: #94a3b8; font-weight: 600; text-transform: uppercase; margin-left: 2px; }
+    /* Speed & PRND Cluster */
+    .speedo-cluster { pointer-events: auto; background: rgba(18, 18, 22, 0.88); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 24px; padding: 8px 20px; display: flex; align-items: center; gap: 18px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5); }
+    .gear-group { display: flex; gap: 7px; font-size: 12px; font-weight: 800; color: #52525b; letter-spacing: 0.5px; }
+    .gear-group span.active { color: #ffffff; text-shadow: 0 0 8px rgba(255, 255, 255, 0.7); }
+    .speed-wrap { display: flex; align-items: baseline; }
+    .speed-val { font-size: 30px; font-weight: 800; color: #ffffff; line-height: 1; letter-spacing: -1px; }
+    .speed-unit { font-size: 11px; color: #a1a1aa; font-weight: 600; text-transform: uppercase; margin-left: 4px; }
 
-    /* Center Telemetry & Headway */
+    /* Center Proximity & Collision Alert */
     .hud-center { text-align: center; }
-    .distance-badge { display: inline-block; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(16px); border: 1px solid rgba(0, 230, 118, 0.4); border-radius: 14px; padding: 10px 22px; color: #00e676; font-size: 20px; font-weight: 800; letter-spacing: 0.5px; transition: all 0.3s ease; }
-    .distance-badge.warning { border-color: rgba(255, 234, 0, 0.6); color: #ffea00; }
-    .distance-badge.danger { border-color: rgba(255, 23, 68, 0.8); color: #ff1744; animation: pulseRed 0.8s infinite; }
-    @keyframes pulseRed { 0% { box-shadow: 0 0 0 0 rgba(255, 23, 68, 0.5); } 70% { box-shadow: 0 0 0 16px rgba(255, 23, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 23, 68, 0); } }
+    .headway-badge { display: inline-flex; align-items: center; gap: 8px; background: rgba(18, 18, 22, 0.88); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 16px; padding: 10px 22px; color: #ffffff; font-size: 17px; font-weight: 700; letter-spacing: 0.5px; transition: all 0.3s ease; box-shadow: 0 6px 24px rgba(0,0,0,0.6); }
+    .headway-badge.danger { border-color: rgba(239, 68, 68, 0.85); color: #ef4444; background: rgba(30, 10, 14, 0.9); animation: pulseDanger 0.85s infinite; }
+    @keyframes pulseDanger { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); } 70% { box-shadow: 0 0 0 16px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
 
-    /* Bottom Flank Cards */
+    /* Bottom Side Threat Indicators */
     .hud-bottom { display: flex; justify-content: space-between; align-items: flex-end; }
-    .telemetry-card { background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 14px; padding: 12px 18px; color: #94a3b8; font-size: 11px; letter-spacing: 0.5px; }
-    .telemetry-card b { color: #fff; font-size: 14px; margin-left: 4px; }
-    .card-left { border-left: 3px solid #38bdf8; }
-    .card-right { border-right: 3px solid #38bdf8; text-align: right; }
+    .flank-card { pointer-events: auto; background: rgba(18, 18, 22, 0.88); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px; padding: 12px 18px; color: #a1a1aa; font-size: 11px; letter-spacing: 0.8px; text-transform: uppercase; font-weight: 600; box-shadow: 0 4px 20px rgba(0,0,0,0.5); min-width: 140px; }
+    .flank-card b { color: #ffffff; font-size: 14px; margin-left: 6px; }
+    .flank-card.active-alert { border-color: #ef4444; background: rgba(30, 10, 14, 0.9); color: #ef4444; }
+    .flank-card.active-alert b { color: #ef4444; text-shadow: 0 0 10px rgba(239, 68, 68, 0.8); }
 
-    /* Interactive Settings Modal */
-    #settings-modal { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; background: rgba(0,0,0,0.85); backdrop-filter: blur(16px); padding: 20px; align-items: center; justify-content: center; }
-    .modal-card { background: #0f172a; border: 1px solid rgba(255,255,255,0.15); border-radius: 20px; width: 100%; max-width: 400px; padding: 24px; color: #fff; box-shadow: 0 20px 40px rgba(0,0,0,0.6); }
-    .modal-card h2 { font-size: 18px; font-weight: 700; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
-    .modal-card label { display: block; font-size: 11px; color: #94a3b8; margin-top: 14px; margin-bottom: 6px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.8px; }
-    .modal-card input[type=text], .modal-card input[type=password] { width: 100%; padding: 12px 14px; background: #1e293b; border: 1px solid #334155; border-radius: 10px; color: #fff; font-size: 14px; outline: none; }
-    .modal-card input[type=range] { width: 100%; accent-color: #38bdf8; margin: 8px 0; }
-    .btn-save { width: 100%; padding: 14px; background: #0284c7; border: none; border-radius: 12px; color: #fff; font-size: 14px; font-weight: 700; margin-top: 22px; cursor: pointer; transition: all 0.2s; }
-    .btn-save:hover { background: #0369a1; }
-    .btn-close { background: none; border: none; color: #94a3b8; font-size: 22px; cursor: pointer; }
+    /* Settings Modal */
+    #settings-modal { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; background: rgba(0,0,0,0.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); padding: 20px; align-items: center; justify-content: center; }
+    .modal-box { background: #121216; border: 1px solid rgba(255,255,255,0.18); border-radius: 22px; width: 100%; max-width: 400px; padding: 26px; color: #fff; box-shadow: 0 25px 50px rgba(0,0,0,0.8); }
+    .modal-box h2 { font-size: 18px; font-weight: 700; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; letter-spacing: -0.3px; }
+    .modal-box label { display: block; font-size: 11px; color: #a1a1aa; margin-top: 16px; margin-bottom: 8px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.8px; }
+    .modal-box input[type=text], .modal-box input[type=password] { width: 100%; padding: 13px 15px; background: #1c1c22; border: 1px solid #2e2e38; border-radius: 12px; color: #fff; font-size: 14px; outline: none; transition: border-color 0.2s; }
+    .modal-box input[type=text]:focus, .modal-box input[type=password]:focus { border-color: #ffffff; }
+    .modal-box input[type=range] { width: 100%; accent-color: #ffffff; margin: 10px 0; }
+    .btn-action { width: 100%; padding: 14px; background: #ffffff; border: none; border-radius: 14px; color: #000000; font-size: 14px; font-weight: 700; margin-top: 24px; cursor: pointer; transition: opacity 0.2s; }
+    .btn-action:hover { opacity: 0.9; }
+    .btn-close { background: none; border: none; color: #71717a; font-size: 24px; cursor: pointer; }
+    .btn-close:hover { color: #fff; }
   </style>
 </head>
 <body>
   <canvas id="canvas"></canvas>
 
   <div id="overlay-hud">
-    <!-- Top Header -->
+    <!-- Top Instrument Bar -->
     <div class="hud-top">
-      <div class="status-badge" onclick="toggleSettings()">
+      <div class="status-pill" onclick="toggleSettings()">
         <div id="status-dot" class="status-dot connecting"></div>
         <span id="state-text">INITIALIZING...</span>
       </div>
 
       <div class="speedo-cluster">
-        <div class="gear-pills">
+        <div class="gear-group">
           <span class="active">D</span>
           <span>N</span>
           <span>R</span>
           <span>P</span>
         </div>
-        <div class="speed-display">
-          <span id="speed-val">0</span><span class="speed-unit">cm/s</span>
+        <div class="speed-wrap">
+          <span id="speed-val" class="speed-val">0</span>
+          <span class="speed-unit">cm/s</span>
         </div>
       </div>
 
-      <div class="status-badge" onclick="toggleSettings()">
-        <span>⚙️ Settings</span>
+      <div class="status-pill" onclick="toggleSettings()">
+        <span>SETTINGS</span>
       </div>
     </div>
 
-    <!-- Center Proximity HUD -->
+    <!-- Center Headway Telemetry -->
     <div class="hud-center">
-      <div id="dist-card" class="distance-badge">HEADWAY: CLEAR</div>
+      <div id="dist-card" class="headway-badge">
+        <span id="dist-text">HEADWAY: CLEAR</span>
+      </div>
     </div>
 
-    <!-- Bottom Hazard Flanks -->
+    <!-- Bottom Flank Threat Monitors -->
     <div class="hud-bottom">
-      <div class="telemetry-card card-left">LEFT BLIND SPOT: <b id="left-text">CLEAR</b></div>
-      <div class="telemetry-card card-right">RIGHT BLIND SPOT: <b id="right-text">CLEAR</b></div>
+      <div id="card-left" class="flank-card">LEFT BLIND SPOT: <b id="left-text">CLEAR</b></div>
+      <div id="card-right" class="flank-card" style="text-align: right;">RIGHT BLIND SPOT: <b id="right-text">CLEAR</b></div>
     </div>
   </div>
 
-  <!-- Settings Modal (Hotspot & Sensor Calibration) -->
+  <!-- Settings Modal (Hotspot Configuration & Radar Threshold) -->
   <div id="settings-modal">
-    <div class="modal-card">
-      <h2><span>Vehicle & Network Config</span><button class="btn-close" onclick="toggleSettings()">✕</button></h2>
+    <div class="modal-box">
+      <h2><span>Vehicle Config</span><button class="btn-close" onclick="toggleSettings()">✕</button></h2>
       
-      <label>Headway Warning Threshold: <span id="thresh-val" style="color:#38bdf8; font-weight:bold;">20 cm</span></label>
+      <label>Headway Warning Threshold: <span id="thresh-val" style="color:#ffffff; font-weight:bold;">20 cm</span></label>
       <input type="range" id="thresh-slider" min="10" max="60" value="20" oninput="document.getElementById('thresh-val').innerText = this.value + ' cm'">
 
       <label>Connect to Phone Hotspot (SSID):</label>
@@ -110,7 +116,7 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
       <label>Hotspot Password:</label>
       <input type="password" id="cfg-pass" placeholder="Password">
 
-      <button class="btn-save" onclick="saveWifiConfig()">Save & Connect Truck</button>
+      <button class="btn-action" onclick="saveWifiConfig()">Save & Connect Truck</button>
     </div>
   </div>
 
@@ -159,44 +165,47 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
 
     function updateTelemetryUI(data) {
       currentData = data;
-      document.getElementById('left-text').innerText = data.left ? "HAZARD" : "CLEAR";
-      document.getElementById('left-text').style.color = data.left ? "#ff1744" : "#00e676";
-      document.getElementById('right-text').innerText = data.right ? "HAZARD" : "CLEAR";
-      document.getElementById('right-text').style.color = data.right ? "#ff1744" : "#00e676";
+      const cardLeft = document.getElementById('card-left');
+      const cardRight = document.getElementById('card-right');
+      const leftText = document.getElementById('left-text');
+      const rightText = document.getElementById('right-text');
+
+      leftText.innerText = data.left ? "HAZARD" : "CLEAR";
+      cardLeft.className = data.left ? "flank-card active-alert" : "flank-card";
+
+      rightText.innerText = data.right ? "HAZARD" : "CLEAR";
+      cardRight.className = data.right ? "flank-card active-alert" : "flank-card";
 
       const distCard = document.getElementById('dist-card');
+      const distText = document.getElementById('dist-text');
       const dot = document.getElementById('status-dot');
       const stateText = document.getElementById('state-text');
       const speedVal = document.getElementById('speed-val');
 
       if (data.front_valid && data.front_cm > 0) {
-        distCard.innerText = `HEADWAY: ${Math.round(data.front_cm)} cm`;
-        speedVal.innerText = (data.front_cm < 30) ? "12" : "28";
+        distText.innerText = `HEADWAY: ${Math.round(data.front_cm)} CM`;
+        speedVal.innerText = (data.front_cm < 25) ? "14" : "32";
 
-        if (data.front_cm < 20) {
-          distCard.className = "distance-badge danger";
+        if (data.front_cm <= 20) {
+          distCard.className = "headway-badge danger";
           dot.className = "status-dot danger";
           stateText.innerText = "COLLISION ALERT";
-        } else if (data.front_cm < 45) {
-          distCard.className = "distance-badge warning";
-          dot.className = "status-dot warning";
-          stateText.innerText = "CAUTION DISTANCE";
         } else {
-          distCard.className = "distance-badge";
+          distCard.className = "headway-badge";
           dot.className = "status-dot";
-          stateText.innerText = "CLEAR CORRIDOR";
+          stateText.innerText = "TRACKING ACTIVE";
         }
       } else {
-        distCard.innerText = "HEADWAY: CLEAR";
-        distCard.className = "distance-badge";
-        speedVal.innerText = "35";
+        distText.innerText = "HEADWAY: CLEAR";
+        distCard.className = "headway-badge";
+        speedVal.innerText = "45";
 
         if (data.left || data.right) {
           dot.className = "status-dot danger";
-          stateText.innerText = data.left && data.right ? "DUAL SIDE ALERT" : (data.left ? "LEFT BLIND SPOT" : "RIGHT BLIND SPOT");
+          stateText.innerText = data.left && data.right ? "DUAL SIDE THREAT" : (data.left ? "LEFT BLIND SPOT" : "RIGHT BLIND SPOT");
         } else {
           dot.className = "status-dot";
-          stateText.innerText = "LIVE PERCEPTION";
+          stateText.innerText = "PERCEPTION ACTIVE";
         }
       }
     }
@@ -239,146 +248,161 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
       ctx.clearRect(0, 0, w, h);
 
       const vpX = w / 2;
-      const vpY = h * 0.38;
+      const vpY = h * 0.36;
 
-      ctx.fillStyle = '#07090e';
+      // 1. Monotone Dark Void
+      ctx.fillStyle = '#0b0c10';
       ctx.fillRect(0, 0, w, h);
 
-      // Perspective Road Horizon
+      // 2. Tesla Road Surface (Gradient in charcoal / dark graphite)
       const grad = ctx.createLinearGradient(0, vpY, 0, h);
-      grad.addColorStop(0, '#0f172a');
-      grad.addColorStop(1, '#020617');
+      grad.addColorStop(0, '#13141a');
+      grad.addColorStop(1, '#08090c');
       ctx.fillStyle = grad;
       ctx.beginPath();
-      ctx.moveTo(vpX - 8, vpY);
-      ctx.lineTo(vpX + 8, vpY);
-      ctx.lineTo(w * 0.9, h);
-      ctx.lineTo(w * 0.1, h);
+      ctx.moveTo(vpX - 12, vpY);
+      ctx.lineTo(vpX + 12, vpY);
+      ctx.lineTo(w * 0.88, h);
+      ctx.lineTo(w * 0.12, h);
       ctx.closePath();
       ctx.fill();
 
-      // Road Lane Markings
-      roadOffset = (roadOffset + 4) % 40;
-      ctx.strokeStyle = 'rgba(56, 189, 248, 0.5)';
-      ctx.lineWidth = 3;
+      // 3. Crisp Road Lane Markings (Tesla White / Gray)
+      roadOffset = (roadOffset + 3.5) % 40;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+      ctx.lineWidth = 2.5;
 
-      for (let z = 10; z < 400; z += 40) {
+      for (let z = 10; z < 420; z += 40) {
         const pz = z - roadOffset;
         if (pz <= 5) continue;
         const scale = 220 / (pz + 100);
-        const y = vpY + (h - vpY) * (scale * 0.7);
-        const lw = 40 * scale;
+        const y = vpY + (h - vpY) * (scale * 0.72);
+        const lw = 44 * scale;
 
         ctx.beginPath();
         ctx.moveTo(vpX - lw, y);
-        ctx.lineTo(vpX - lw, y + 15 * scale);
+        ctx.lineTo(vpX - lw, y + 18 * scale);
         ctx.moveTo(vpX + lw, y);
-        ctx.lineTo(vpX + lw, y + 15 * scale);
+        ctx.lineTo(vpX + lw, y + 18 * scale);
         ctx.stroke();
       }
 
-      // 3D Front Obstacle Proxy
-      if (currentData.front_valid && currentData.front_cm > 0 && currentData.front_cm <= 120) {
-        targetObstacleZ = 40 + currentData.front_cm * 2.2;
+      // 4. Dynamic 3D Headway Proxy Vehicle (Ahead of Truck)
+      if (currentData.front_valid && currentData.front_cm > 0 && currentData.front_cm <= 130) {
+        targetObstacleZ = 45 + currentData.front_cm * 2.1;
       } else {
-        targetObstacleZ = 300;
+        targetObstacleZ = 320;
       }
-      curObstacleZ += (targetObstacleZ - curObstacleZ) * 0.15;
+      curObstacleZ += (targetObstacleZ - curObstacleZ) * 0.16;
 
-      if (curObstacleZ < 260) {
+      if (curObstacleZ < 280) {
         const obsScale = 220 / (curObstacleZ + 100);
-        const obsY = vpY + (h - vpY) * (obsScale * 0.7);
-        const obsW = 80 * obsScale;
-        const obsH = 45 * obsScale;
+        const obsY = vpY + (h - vpY) * (obsScale * 0.72);
+        const obsW = 86 * obsScale;
+        const obsH = 48 * obsScale;
 
         ctx.save();
         ctx.translate(vpX, obsY);
-        const isDanger = (currentData.front_cm > 0 && currentData.front_cm <= 20);
-        ctx.fillStyle = isDanger ? 'rgba(239, 68, 68, 0.85)' : 'rgba(245, 158, 11, 0.85)';
-        ctx.strokeStyle = isDanger ? '#ff1744' : '#f59e0b';
+        const isHazard = (currentData.front_cm > 0 && currentData.front_cm <= 20);
+        
+        // Tesla Style Vehicle Box (Silver-Gray or Hazard Red)
+        ctx.fillStyle = isHazard ? 'rgba(239, 68, 68, 0.92)' : 'rgba(212, 212, 216, 0.85)';
+        ctx.strokeStyle = isHazard ? '#ffffff' : '#71717a';
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.roundRect(-obsW/2, -obsH, obsW, obsH, 6 * obsScale);
+        ctx.roundRect(-obsW/2, -obsH, obsW, obsH, 8 * obsScale);
         ctx.fill();
         ctx.stroke();
 
-        ctx.fillStyle = '#fff';
-        ctx.font = `bold ${Math.max(10, 14 * obsScale)}px sans-serif`;
+        // Distance Tag in Pure Monotone
+        ctx.fillStyle = isHazard ? '#ffffff' : '#09090b';
+        ctx.font = `800 ${Math.max(10, 14 * obsScale)}px sans-serif`;
         ctx.textAlign = 'center';
-        ctx.fillText(`${Math.round(currentData.front_cm)} cm`, 0, -obsH / 2 + 4 * obsScale);
+        ctx.fillText(`${Math.round(currentData.front_cm)} CM`, 0, -obsH / 2 + 5 * obsScale);
         ctx.restore();
       }
 
-      // Draw Hero 3D Truck (Foreground)
+      // 5. Hero 3D Truck (Foreground)
       const truckX = vpX;
-      const truckY = h * 0.75;
+      const truckY = h * 0.76;
       const tw = 84;
-      const th = 130;
+      const th = 132;
 
       ctx.save();
       ctx.translate(truckX, truckY);
 
-      // Radar Waves on Screen Left (when Left IR triggers):
-      // Drawn on x < 0 (left of truck)
+      // --- RADAR WAVE ARC POSITIONS (FLIPPED AS REQUESTED) ---
+      // Left IR hazard -> Screen Left (x < 0)
       if (currentData.left) {
-        const pulse = (Math.sin(time * 0.01) + 1) * 0.5;
-        ctx.strokeStyle = `rgba(255, 23, 68, ${0.4 + 0.5 * pulse})`;
+        const pulse = (Math.sin(time * 0.012) + 1) * 0.5;
+        ctx.strokeStyle = `rgba(239, 68, 68, ${0.4 + 0.6 * pulse})`;
         ctx.lineWidth = 3;
         for (let i = 1; i <= 3; i++) {
           ctx.beginPath();
-          ctx.arc(-tw/2 - 10, -th * 0.2, 18 * i + pulse * 8, Math.PI * 0.6, Math.PI * 1.4);
+          ctx.arc(-tw/2 - 12, -th * 0.18, 16 * i + pulse * 9, Math.PI * 0.6, Math.PI * 1.4);
           ctx.stroke();
         }
       }
 
-      // Radar Waves on Screen Right (when Right IR triggers):
-      // Drawn on x > 0 (right of truck)
+      // Right IR hazard -> Screen Right (x > 0)
       if (currentData.right) {
-        const pulse = (Math.sin(time * 0.01) + 1) * 0.5;
-        ctx.strokeStyle = `rgba(255, 23, 68, ${0.4 + 0.5 * pulse})`;
+        const pulse = (Math.sin(time * 0.012) + 1) * 0.5;
+        ctx.strokeStyle = `rgba(239, 68, 68, ${0.4 + 0.6 * pulse})`;
         ctx.lineWidth = 3;
         for (let i = 1; i <= 3; i++) {
           ctx.beginPath();
-          ctx.arc(tw/2 + 10, -th * 0.2, 18 * i + pulse * 8, -Math.PI * 0.4, Math.PI * 0.4);
+          ctx.arc(tw/2 + 12, -th * 0.18, 16 * i + pulse * 9, -Math.PI * 0.4, Math.PI * 0.4);
           ctx.stroke();
         }
       }
 
-      // Truck Shadow
-      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      // Ground Ambient Shadow
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
       ctx.beginPath();
-      ctx.ellipse(0, th * 0.4, tw * 0.65, 12, 0, 0, Math.PI * 2);
+      ctx.ellipse(0, th * 0.42, tw * 0.68, 14, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      // Truck Body
-      ctx.fillStyle = '#1e293b';
-      ctx.strokeStyle = '#38bdf8';
+      // Main Cab Body (Tesla Monotone Graphite & Pure White Edges)
+      ctx.fillStyle = '#1c1c24';
+      ctx.strokeStyle = '#52525b';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.roundRect(-tw/2, -th/2, tw, th, 12);
+      ctx.roundRect(-tw/2, -th/2, tw, th, 14);
       ctx.fill();
       ctx.stroke();
 
-      // Windshield
-      ctx.fillStyle = '#0284c7';
+      // Windshield (Smoked Glass with subtle gradient)
+      const glassGrad = ctx.createLinearGradient(0, -th * 0.38, 0, -th * 0.12);
+      glassGrad.addColorStop(0, '#27272a');
+      glassGrad.addColorStop(1, '#09090b');
+      ctx.fillStyle = glassGrad;
+      ctx.strokeStyle = '#3f3f46';
+      ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.roundRect(-tw * 0.38, -th * 0.35, tw * 0.76, 32, 6);
-      ctx.fill();
-
-      // Cargo Bed
-      ctx.fillStyle = '#0f172a';
-      ctx.strokeStyle = 'rgba(255,255,255,0.15)';
-      ctx.beginPath();
-      ctx.roundRect(-tw * 0.42, 0, tw * 0.84, th * 0.42, 6);
+      ctx.roundRect(-tw * 0.38, -th * 0.36, tw * 0.76, 32, 8);
       ctx.fill();
       ctx.stroke();
 
-      // Headlights
-      ctx.fillStyle = '#38bdf8';
-      ctx.shadowColor = '#38bdf8';
-      ctx.shadowBlur = 12;
-      ctx.fillRect(-tw/2 + 6, -th/2 - 4, 16, 6);
-      ctx.fillRect(tw/2 - 22, -th/2 - 4, 16, 6);
+      // Bed / Sensor Deck (Matte Dark Slate)
+      ctx.fillStyle = '#101014';
+      ctx.strokeStyle = '#27272a';
+      ctx.beginPath();
+      ctx.roundRect(-tw * 0.42, 4, tw * 0.84, th * 0.42, 8);
+      ctx.fill();
+      ctx.stroke();
+
+      // Tesla Emissive White Headlights
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = '#ffffff';
+      ctx.shadowBlur = 16;
+      ctx.fillRect(-tw/2 + 6, -th/2 - 3, 16, 5);
+      ctx.fillRect(tw/2 - 22, -th/2 - 3, 16, 5);
+      ctx.shadowBlur = 0;
+
+      // Side Mirror Stubs
+      ctx.fillStyle = '#52525b';
+      ctx.fillRect(-tw/2 - 6, -th * 0.22, 6, 8);
+      ctx.fillRect(tw/2, -th * 0.22, 6, 8);
 
       ctx.restore();
       requestAnimationFrame(render);
