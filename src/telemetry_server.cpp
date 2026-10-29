@@ -2,11 +2,13 @@
 #include "dashboard_html.h"
 #include <ESPmDNS.h>
 #include <Preferences.h>
+#include <esp_wifi.h>
 
 static Preferences prefs;
 static char storedSsid[33] = "";
 static char storedPass[65] = "";
 static uint32_t lastStaAttemptMs = 0;
+static uint32_t lastIpPrintMs = 0;
 static bool staConnected = false;
 
 static const char* stateToString(BsmState state) {
@@ -26,7 +28,8 @@ TelemetryServer::TelemetryServer()
       _packetCounter(0) {}
 
 void TelemetryServer::begin() {
-    // Load stored Wi-Fi credentials from NVS flash
+    // 1. Load stored Wi-Fi credentials from NVS flash
+    // If not set, defaults to "Andronix" / "samsingh"
     prefs.begin("wifi", false);
     String s = prefs.getString("ssid", HOTSPOT_SSID);
     String p = prefs.getString("pass", HOTSPOT_PASSWORD);
@@ -34,43 +37,44 @@ void TelemetryServer::begin() {
     strncpy(storedPass, p.c_str(), sizeof(storedPass) - 1);
     prefs.end();
 
-    // 1. Dual Wi-Fi Mode: AP + Station
+    // 2. Set Wi-Fi Mode to AP + STA
     WiFi.mode(WIFI_AP_STA);
     WiFi.softAP(WIFI_AP_SSID, WIFI_AP_PASSWORD);
 
-    IPAddress apIP = WiFi.softAPIP();
-    Serial.println();
-    Serial.println(F("=================================================="));
-    Serial.println(F("   WI-FI NETWORK & WEB ACCESS CREDENTIALS"));
-    Serial.println(F("=================================================="));
-    Serial.print(F(" 1. Standalone AP : "));
-    Serial.println(WIFI_AP_SSID);
-    Serial.print(F("    Password      : "));
-    Serial.println(WIFI_AP_PASSWORD);
-    Serial.print(F("    Browser URL   : http://"));
-    Serial.println(apIP);
-    Serial.println(F(" 2. Auto-Scan STA : Scanning for configured phone hotspot..."));
-    Serial.println(F("=================================================="));
+    // Disable Wi-Fi sleep for rock-solid zero-latency responsiveness
+    WiFi.setSleep(false);
 
-    // Try initial connection to hotspot
+    // Initial connection attempt to Andronix hotspot
     if (strlen(storedSsid) > 0) {
         WiFi.begin(storedSsid, storedPass);
     }
 
-    // Start mDNS responder so user can type 'http://blindspottr.local'
+    IPAddress apIP = WiFi.softAPIP();
+    Serial.println();
+    Serial.println(F("=================================================="));
+    Serial.println(F("           BLINDSPOTTR WI-FI & WEB HUD            "));
+    Serial.println(F("=================================================="));
+    Serial.print(F(" [HOTSPOT TARGET] : "));
+    Serial.println(storedSsid);
+    Serial.print(F(" [STANDALONE AP]  : "));
+    Serial.print(WIFI_AP_SSID);
+    Serial.print(F(" (Password: "));
+    Serial.print(WIFI_AP_PASSWORD);
+    Serial.println(F(")"));
+    Serial.print(F(" [AP DIRECT IP]   : http://"));
+    Serial.println(apIP);
+    Serial.println(F("=================================================="));
+
+    // Register mDNS
     if (MDNS.begin("blindspottr")) {
         MDNS.addService("http", "tcp", 80);
         MDNS.addService("ws", "tcp", 80);
-        Serial.println(F("[mDNS] http://blindspottr.local registered"));
     }
 
-    // 2. Attach WebSocket event handlers
+    // 3. Attach WebSocket event handlers
     _ws.onEvent([](AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
         if (type == WS_EVT_CONNECT) {
-            Serial.printf("[WS] Client #%u connected\n", client->id());
-            client->text("{\"event\":\"connected\",\"system\":\"BlindSpottr\",\"version\":\"2.7\"}");
-        } else if (type == WS_EVT_DISCONNECT) {
-            Serial.printf("[WS] Client #%u disconnected\n", client->id());
+            client->text("{\"event\":\"connected\",\"system\":\"BlindSpottr\",\"version\":\"2.8\"}");
         }
     });
 
@@ -81,7 +85,7 @@ void TelemetryServer::begin() {
         request->send(200, "text/html", INDEX_HTML);
     });
 
-    // Web-based Wi-Fi Manager endpoint to save hotspot credentials without re-flashing!
+    // In-browser Wi-Fi configuration endpoint
     _server.on("/api/wifi", HTTP_POST, [](AsyncWebServerRequest *request) {
         if (request->hasParam("ssid", true) && request->hasParam("pass", true)) {
             String newSsid = request->getParam("ssid", true)->value();
@@ -104,7 +108,6 @@ void TelemetryServer::begin() {
         }
     });
 
-    // Health-check HTTP route
     _server.on("/api/status", HTTP_GET, [](AsyncWebServerRequest *request) {
         request->send(200, "application/json", "{\"status\":\"online\",\"system\":\"BlindSpottr\"}");
     });
@@ -119,31 +122,45 @@ uint32_t TelemetryServer::getClientCount() const {
 void TelemetryServer::update(const SensorData& data, BsmState state, uint32_t now) {
     _ws.cleanupClients();
 
-    // Continuous non-blocking Wi-Fi auto-reconnection loop every 10 seconds
+    // 1. Wi-Fi Station connection status and continuous IP printing
     if (WiFi.status() == WL_CONNECTED) {
         if (!staConnected) {
             staConnected = true;
             Serial.println();
             Serial.println(F("**************************************************"));
-            Serial.print(F(" [WIFI] CONNECTED TO PHONE HOTSPOT! IP: http://"));
+            Serial.print(F(" >>> CONNECTED TO HOTSPOT! IP: http://"));
             Serial.println(WiFi.localIP());
             Serial.println(F("**************************************************"));
+            lastIpPrintMs = now;
+        } else {
+            // Periodically print the IP address every 5 seconds so it is never lost!
+            if (now - lastIpPrintMs >= 5000) {
+                lastIpPrintMs = now;
+                Serial.print(F("[WIFI IP] http://"));
+                Serial.print(WiFi.localIP());
+                Serial.print(F(" (RSSI: "));
+                Serial.print(WiFi.RSSI());
+                Serial.println(F(" dBm)"));
+            }
         }
     } else {
         if (staConnected) {
             staConnected = false;
-            Serial.println(F("[WIFI] Hotspot disconnected. Auto-retrying in background..."));
+            Serial.println(F("[WIFI] Disconnected from hotspot. Auto-scanning..."));
         }
-        if (now - lastStaAttemptMs >= 10000) {
+
+        // Active background auto-scan and reconnection every 4 seconds
+        if (now - lastStaAttemptMs >= 4000) {
             lastStaAttemptMs = now;
             if (strlen(storedSsid) > 0) {
+                Serial.printf("[WIFI] Scanning and connecting to '%s'...\n", storedSsid);
                 WiFi.disconnect();
                 WiFi.begin(storedSsid, storedPass);
             }
         }
     }
 
-    // Stream telemetry to active clients at 20 Hz
+    // 2. Stream telemetry to active clients at 20 Hz
     if (now - _lastBroadcastMs < WS_BROADCAST_INTERVAL_MS) {
         return;
     }
